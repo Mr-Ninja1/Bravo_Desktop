@@ -18,12 +18,13 @@
     "appId": "com.example.checklistapp",
     "productName": "Bravo_FormsApp",
     "copyright": "Copyright © RAJAB CULTURE DIGITAL SOLUTIONS",
-    "win": {
-      "target": [
-        "nsis"
-      ],
-      "publisherName": "RAJAB CULTURE DIGITAL SOLUTIONS"
-    },
+      "win": {
+        "target": [
+          "nsis"
+        ]
+        ,"icon": "assets/bravo.ico"
+      },
+    "icon": "assets/bravo.ico",
     "nsis": {
       "oneClick": false,
       "perMachine": false,

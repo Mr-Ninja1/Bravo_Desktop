@@ -33,7 +33,8 @@ function createWindow () {
     height: 800,
     frame: false,
     // Platform-aware app icon (falls back silently if file missing)
-    icon: path.join(__dirname, 'renderer', 'src', 'assets', 'bravo.ico'),
+    // Prefer root-level branded icon for packaged builds
+    icon: path.join(__dirname, 'assets', 'bravo.ico'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
