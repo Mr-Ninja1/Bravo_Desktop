@@ -3,29 +3,48 @@
   "version": "0.0.1",
   "description": "Minimal Electron app to preview and export mobile-saved forms",
   "main": "main.js",
+  "author": "RAJAB CULTURE DIGITAL SOLUTIONS <kulturesik30@gmail.com>",
   "scripts": {
     "start": "electron .",
-    "build-renderer": "node build-renderer.js"
+    "build-renderer": "node build-renderer.js",
+    "dist": "electron-builder"
   },
   "devDependencies": {
     "electron": "^25.0.0",
+    "electron-builder": "^26.0.12",
     "esbuild": "^0.18.20"
   },
   "build": {
     "appId": "com.example.checklistapp",
     "productName": "Bravo_FormsApp",
+    "copyright": "Copyright © RAJAB CULTURE DIGITAL SOLUTIONS",
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "publisherName": "RAJAB CULTURE DIGITAL SOLUTIONS"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": true,
+      "allowToChangeInstallationDirectory": true
+    },
     "publish": [
       {
         "provider": "github",
-        "owner": "GITHUB_OWNER",
-        "repo": "GITHUB_REPO"
+        "owner": "Mr-Ninja1",
+        "repo": "Bravo_Desktop"
       }
     ]
   },
   "dependencies": {
+    "electron-updater": "^4.6.5",
     "keytar": "7.9.0",
+    "prop-types": "^15.8.1",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
+    "react-native-signature-canvas": "^5.0.1",
     "react-native-web": "^0.21.2"
   }
 }

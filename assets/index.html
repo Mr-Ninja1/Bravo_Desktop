@@ -1,0 +1,67 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Checklist Desktop</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div id="app">
+      <div id="splash">
+        <div id="splashContent">
+          <div id="logoContainer">
+            <img id="logo" src="../assets/logo.jpeg" alt="logo" />
+          </div>
+          <h1 id="bravo">Bravo!</h1>
+          <p id="subtitle">Desktop Forms Manager</p>
+          <div id="spinner" class="spinner"></div>
+          <p id="loadingMsg">Starting app</p>
+        </div>
+      </div>
+
+      <div id="main" style="display:none">
+        <header class="topbar">
+          <div class="left">
+            <button id="hamburger" class="hamburger">☰</button>
+            <img id="logoSmall" src="../assets/logo.jpeg" alt="logo" />
+            <h2>Saved Forms</h2>
+          </div>
+          <div class="right">
+            <div id="userInfo" class="userInfo" style="display:none">
+              <img id="userAvatar" src="" alt="avatar" />
+              <div class="userText"><div id="userName"></div><div id="userEmail" class="small"></div></div>
+            </div>
+            <div id="controls" class="controls-visible">
+              <input id="searchInput" placeholder="Search saved forms (name)..." />
+              <select id="yearSelect"><option value="all">All years</option></select>
+              <select id="monthSelect"><option value="all">All months</option></select>
+              <button id="refreshList">Refresh</button>
+            </div>
+          </div>
+        </header>
+
+        <main>
+          <div id="yearRow" style="margin-bottom:12px;padding:8px;display:flex;gap:8px;overflow-x:auto"></div>
+          <div id="listPane">
+            <div id="yearSidebar">
+              <!-- Year cards will be rendered here -->
+              <div id="noYearsPlaceholder" class="placeholder">No years found in Dropbox.</div>
+            </div>
+            <div id="localList">
+              <!-- Restored/local forms will be rendered here as cards grouped by date -->
+            </div>
+          </div>
+          <div id="previewPane">
+            <div id="rnPreview" style="display:none;width:100%;height:720px;overflow:auto;max-width:1100px"></div>
+            <iframe id="previewFrame" style="width:100%;height:720px;border:1px solid #ccc"></iframe>
+          </div>
+        </main>
+      </div>
+    </div>
+
+    <script src="dist/bundle.js"></script>
+    <script src="renderer.js"></script>
+  </body>
+</html>

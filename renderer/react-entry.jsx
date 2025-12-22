@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { View } from 'react-native';
 import components from './src/forms/components/componentsMap';
 import SavedFormRenderer from './src/components/SavedFormRenderer';
+import { mountUpdateNotifier } from './src/components/UpdateNotifier';
 
 // Lightweight ErrorBoundary to catch render errors from presentational components
 class ErrorBoundary extends React.Component {
@@ -118,3 +119,6 @@ window.rnRenderer = {
   },
   unmountFrom
 };
+
+// Initialize global UI helpers
+try { mountUpdateNotifier(); } catch (e) { /* ignore */ }
