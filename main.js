@@ -23,6 +23,10 @@ try {
 // Desktop drive bridge
 const drive = require('./drive-desktop');
 
+// Centralized export directory names (avoid trailing spaces)
+const EXPORT_DIR_NAME = 'Bravo_FormsApp';
+const USER_FORMS_SUBDIR = 'forms';
+
 function createWindow () {
   const win = new BrowserWindow({
     width: 1200,
@@ -235,14 +239,12 @@ ipcMain.handle('export-form-pdf', async (event, payloadWrapper, opts = {}) => {
     if (!html) return { ok: false, error: 'No generator for form type' };
 
     // Choose output directory: default under userData/forms, or optionally save to user's Documents
-    const userBase = opts && opts.saveToDocuments
-      ? path.join(app.getPath('documents') || process.cwd(), 'Bravo_FormsApp  ')
-      : path.join(app.getPath('userData') || process.cwd(), 'forms');
-    try { fs.mkdirSync(userBase, { recursive: true }); } catch (e) {}
+    const exportBase = opts && opts.saveToDocuments
+      ? path.join(app.getPath('documents') || process.cwd(), EXPORT_DIR_NAME)
+      : path.join(app.getPath('userData') || process.cwd(), USER_FORMS_SUBDIR);
+    try { fs.mkdirSync(exportBase, { recursive: true }); } catch (e) {}
     const baseName = (p.title || p.formType || `form-${Date.now()}`).toString().replace(/[^a-z0-9\-\_\.]/ig, '_');
-    const outPath = path.join(userBase, `${baseName}-${Date.now()}.pdf`);
-
-    // Create hidden BrowserWindow to render HTML
+    const outPath = path.join(exportBase, `${baseName}-${Date.now()}.pdf`);
     const win = new BrowserWindow({ show: false, webPreferences: { sandbox: false } });
     await win.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
     // Increase the zoom factor so Chromium rasterizes at higher resolution
@@ -268,7 +270,7 @@ ipcMain.handle('save-capture-png-as-pdf', async (event, payload) => {
     if (!dataUrl || !dataUrl.startsWith('data:')) return { ok: false, error: 'Invalid dataUrl' };
     const baseName = (payload && payload.name) ? payload.name.toString().replace(/[^a-z0-9\-\_\.]/ig, '_') : `capture-${Date.now()}`;
     const userDocs = path.join(app.getPath('documents') || process.cwd());
-    const outDir = path.join(userDocs, 'Bravo_FormsApp  ');
+    const outDir = path.join(userDocs, EXPORT_DIR_NAME);
     try { fs.mkdirSync(outDir, { recursive: true }); } catch (e) {}
     const outPath = path.join(outDir, `${baseName}-${Date.now()}.pdf`);
 
@@ -302,7 +304,7 @@ ipcMain.handle('save-capture-pages-as-pdf', async (event, payload) => {
     if (!pages.length) return { ok: false, error: 'No pages provided' };
     const baseName = (payload && payload.name) ? payload.name.toString().replace(/[^a-z0-9\-\_\.]/ig, '_') : `capture-${Date.now()}`;
     const userDocs = path.join(app.getPath('documents') || process.cwd());
-    const outDir = path.join(userDocs, 'Bravo_FormsApp  ');
+    const outDir = path.join(userDocs, EXPORT_DIR_NAME);
     try { fs.mkdirSync(outDir, { recursive: true }); } catch (e) {}
     const outPath = path.join(outDir, `${baseName}-${Date.now()}.pdf`);
 

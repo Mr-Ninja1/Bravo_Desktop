@@ -634,23 +634,33 @@ async function openEntryModal(entry) {
     title.innerText = entry.title || (wrapped && wrapped.payload && (wrapped.payload.title || wrapped.payload.name)) || 'Form';
 
     const controls = document.createElement('div');
+    controls.style.display = 'flex';
+    controls.style.gap = '8px';
 
     const exportBtn = document.createElement('button');
     exportBtn.innerText = 'Export PDF';
+    exportBtn.style.display = 'inline-flex';
+    exportBtn.style.alignItems = 'center';
+    exportBtn.style.justifyContent = 'center';
     exportBtn.style.marginRight = '8px';
-    exportBtn.style.padding = '8px 10px';
+    exportBtn.style.padding = '10px 16px';
+    exportBtn.style.minWidth = '96px';
     exportBtn.style.background = '#0b5bd7';
     exportBtn.style.color = '#fff';
     exportBtn.style.border = 'none';
-    exportBtn.style.borderRadius = '6px';
+    exportBtn.style.borderRadius = '8px';
     exportBtn.style.cursor = 'pointer';
 
     const closeBtn = document.createElement('button');
     closeBtn.innerText = 'Close';
-    closeBtn.style.padding = '8px 10px';
+    closeBtn.style.display = 'inline-flex';
+    closeBtn.style.alignItems = 'center';
+    closeBtn.style.justifyContent = 'center';
+    closeBtn.style.padding = '10px 16px';
+    closeBtn.style.minWidth = '80px';
     closeBtn.style.background = '#e5e7eb';
     closeBtn.style.border = 'none';
-    closeBtn.style.borderRadius = '6px';
+    closeBtn.style.borderRadius = '8px';
     closeBtn.style.cursor = 'pointer';
 
     controls.appendChild(exportBtn);
@@ -966,7 +976,6 @@ function renderLocalHistory(list) {
       const actions = document.createElement('div'); actions.className = 'formActions';
       const openBtn = document.createElement('button'); openBtn.innerText = 'Open';
       const delBtn = document.createElement('button'); delBtn.innerText = 'Delete'; delBtn.style.marginLeft = '8px'; delBtn.style.background = '#e74c3c';
-      openBtn.addEventListener('click', () => { try { openEntryModal(entry); } catch (e) { console.warn('openEntryModal failed', e); } });
       delBtn.addEventListener('click', async () => {
         try {
           if (!confirm('Delete this restored form? This cannot be undone.')) return;
@@ -1032,23 +1041,33 @@ function renderLocalHistory(list) {
           title.innerText = entry.title || (wrapped && wrapped.payload && (wrapped.payload.title || wrapped.payload.name)) || 'Form';
 
           const controls = document.createElement('div');
+          controls.style.display = 'flex';
+          controls.style.gap = '8px';
 
           const exportBtn = document.createElement('button');
           exportBtn.innerText = 'Export PDF';
+          exportBtn.style.display = 'inline-flex';
+          exportBtn.style.alignItems = 'center';
+          exportBtn.style.justifyContent = 'center';
           exportBtn.style.marginRight = '8px';
-          exportBtn.style.padding = '8px 10px';
+          exportBtn.style.padding = '10px 16px';
+          exportBtn.style.minWidth = '96px';
           exportBtn.style.background = '#0b5bd7';
           exportBtn.style.color = '#fff';
           exportBtn.style.border = 'none';
-          exportBtn.style.borderRadius = '6px';
+          exportBtn.style.borderRadius = '8px';
           exportBtn.style.cursor = 'pointer';
 
           const closeBtn = document.createElement('button');
           closeBtn.innerText = 'Close';
-          closeBtn.style.padding = '8px 10px';
+          closeBtn.style.display = 'inline-flex';
+          closeBtn.style.alignItems = 'center';
+          closeBtn.style.justifyContent = 'center';
+          closeBtn.style.padding = '10px 16px';
+          closeBtn.style.minWidth = '80px';
           closeBtn.style.background = '#e5e7eb';
           closeBtn.style.border = 'none';
-          closeBtn.style.borderRadius = '6px';
+          closeBtn.style.borderRadius = '8px';
           closeBtn.style.cursor = 'pointer';
 
           controls.appendChild(exportBtn);
@@ -1740,52 +1759,7 @@ if (disconnectBtn) {
   });
 }
 
-// hamburger menu with overlay and hover/outside close
-const hamburger = document.getElementById('hamburger');
-let sideMenu = null;
-let sideMenuOverlay = null;
-let sideMenuHideTimer = null;
-function hideSideMenu() {
-  try {
-    if (sideMenu) sideMenu.style.display = 'none';
-    if (sideMenuOverlay) sideMenuOverlay.style.display = 'none';
-  } catch (e) {}
-}
-if (hamburger) {
-  hamburger.addEventListener('click', () => {
-    if (!sideMenu) {
-      sideMenu = document.createElement('div'); sideMenu.className = 'sideMenu';
-      const btnRefresh = document.createElement('button'); btnRefresh.innerText = 'Refresh'; btnRefresh.addEventListener('click', () => { loadDropboxFiles(); hideSideMenu(); });
-      const btnDisconnect = document.createElement('button'); btnDisconnect.innerText = 'Disconnect'; btnDisconnect.addEventListener('click', async () => { document.getElementById('disconnectDropbox').click(); hideSideMenu(); });
-      sideMenu.appendChild(btnRefresh); sideMenu.appendChild(btnDisconnect);
-      document.body.appendChild(sideMenu);
-
-      sideMenuOverlay = document.createElement('div'); sideMenuOverlay.className = 'sideMenuOverlay';
-      document.body.appendChild(sideMenuOverlay);
-
-      // clicking overlay closes menu
-      sideMenuOverlay.addEventListener('click', () => hideSideMenu());
-
-      // hide on mouseleave after short delay, cancel on re-enter
-      sideMenu.addEventListener('mouseleave', () => {
-        sideMenuHideTimer = setTimeout(() => { hideSideMenu(); }, 250);
-      });
-      sideMenu.addEventListener('mouseenter', () => { if (sideMenuHideTimer) { clearTimeout(sideMenuHideTimer); sideMenuHideTimer = null; } });
-
-      sideMenu.style.display = 'block';
-      sideMenuOverlay.style.display = 'block';
-    } else {
-      const showing = sideMenu.style.display === 'block';
-      if (showing) hideSideMenu(); else { sideMenu.style.display = 'block'; if (sideMenuOverlay) sideMenuOverlay.style.display = 'block'; }
-    }
-  });
-
-  // close when clicking outside anywhere as well
-  document.addEventListener('click', (e) => {
-    if (!sideMenu) return;
-    if (!sideMenu.contains(e.target) && !hamburger.contains(e.target)) hideSideMenu();
-  });
-}
+// hamburger/side menu removed — functionality replaced by visible sidebar controls
 
 // load account when sign-in completes
 async function loadAccountAfterSignIn() {
