@@ -1,0 +1,109 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Checklist Desktop</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div id="app">
+      <div id="splash">
+        <div id="splashContent">
+          <div id="logoContainer">
+            <img id="logo" src="../assets/logo.jpeg" alt="logo" />
+          </div>
+          <h1 id="bravo">Bravo!</h1>
+          <p id="subtitle">Desktop Forms Manager</p>
+          <div id="spinner" class="spinner"></div>
+          <p id="loadingMsg">Starting app</p>
+        </div>
+      </div>
+
+      <div id="main" style="display:none">
+        <header class="topbar" id="customTitlebar">
+          <div class="left">
+            <button id="hamburger" class="hamburger">☰</button>
+            <img id="logoSmall" src="../assets/logo.jpeg" alt="logo" />
+            <h2>Bravo forms managment app</h2>
+          </div>
+          <div class="right">
+            <div id="userInfo" class="userInfo" style="display:none">
+              <img id="userAvatar" src="" alt="avatar" />
+              <div class="userText"><div id="userName"></div><div id="userEmail" class="small"></div></div>
+            </div>
+            <!-- Compact window controls appear in the top row -->
+            <div id="windowControls" class="window-controls">
+              <button id="winMin" class="window-btn" title="Minimize" aria-label="Minimize">
+                <span class="icon">
+                  <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><rect x="4" y="11" width="16" height="2" rx="1"/></svg>
+                </span>
+              </button>
+              <button id="winMax" class="window-btn" title="Maximize" aria-label="Maximize">
+                <span class="icon">
+                  <svg class="icon-normal" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="1"/></svg>
+                  <svg class="icon-max" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M3 9h10V3h8v16h-8v6H3V9zm2 2v8h6v-6H5z"/></svg>
+                </span>
+              </button>
+              <button id="winClose" class="window-btn close" title="Close" aria-label="Close">
+                <span class="icon">
+                  <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M6.3 5.3l12.4 12.4-1.4 1.4L4.9 6.7z"/><path d="M18.7 5.3L6.3 17.7l1.4 1.4L20.1 6.7z"/></svg>
+                </span>
+              </button>
+            </div>
+          </div>
+        </header>
+        <!-- Controls row below the titlebar: search + buttons. Filters hidden for now. -->
+          <div class="controlsBar">
+          <div id="controls" class="controls-visible">
+            <div class="controls-left">
+              <input id="searchInput" placeholder="Search saved forms (name, site, type...)" />
+              <label class="dateField" for="dateFrom">
+                <input id="dateFrom" type="date" />
+                <svg class="dateIcon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="#64748b" d="M7 10h5v5H7z" opacity=".6"></path><path fill="#64748b" d="M19 4h-1V2h-2v2H8V2H6v2H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2zM5 20V9h14v11H5z"></path></svg>
+              </label>
+              <label class="dateField" for="dateTo">
+                <input id="dateTo" type="date" />
+                <svg class="dateIcon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="#64748b" d="M7 10h5v5H7z" opacity=".6"></path><path fill="#64748b" d="M19 4h-1V2h-2v2H8V2H6v2H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2zM5 20V9h14v11H5z"></path></svg>
+              </label>
+              <div id="quickFilters" style="display:flex;align-items:center;gap:6px;margin-right:8px"></div>
+            </div>
+            <div class="controls-right">
+              <button id="refreshList">Refresh</button>
+            </div>
+            <!-- Filters temporarily hidden: year/month selectors will be re-added later -->
+            <select id="yearSelect" style="display:none"><option value="all">All years</option></select>
+            <select id="monthSelect" style="display:none"><option value="all">All months</option></select>
+          </div>
+        </div>
+
+        <!-- footer moved below the app container to reserve bottom space -->
+
+        <main>
+          <div id="yearRow" style="margin-bottom:12px;padding:8px;display:flex;gap:8px;overflow-x:auto"></div>
+          <div id="listPane">
+            <div id="yearSidebar">
+                <button id="sidebarToggleBtn" class="sidebar-toggle" title="Hide sidebar">✕</button>
+                <!-- Year cards will be rendered here -->
+                <div id="noYearsPlaceholder" class="placeholder">No years found in Dropbox.</div>
+              </div>
+              <div id="sidebarEdge" class="sidebar-edge" title="Open sidebar"></div>
+            <div id="localList">
+              <!-- Restored/local forms will be rendered here as cards grouped by date -->
+            </div>
+          </div>
+          <div id="previewPane">
+            <div id="watermark" aria-hidden="true"></div>
+            <div id="rnPreview" style="display:none;width:100%;height:720px;overflow:auto;max-width:1100px"></div>
+            <iframe id="previewFrame" style="width:100%;height:720px;border:1px solid #ccc"></iframe>
+          </div>
+        </main>
+      </div>
+    </div>
+    </div>
+
+    <script src="dist/bundle.js"></script>
+    <script src="renderer.js"></script>
+  </body>
+</html>

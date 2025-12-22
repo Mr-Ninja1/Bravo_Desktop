@@ -1,0 +1,31 @@
+{
+  "name": "checklistapp-desktop",
+  "version": "0.0.1",
+  "description": "Minimal Electron app to preview and export mobile-saved forms",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build-renderer": "node build-renderer.js"
+  },
+  "devDependencies": {
+    "electron": "^25.0.0",
+    "esbuild": "^0.18.20"
+  },
+  "build": {
+    "appId": "com.example.checklistapp",
+    "productName": "Bravo_FormsApp",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "GITHUB_OWNER",
+        "repo": "GITHUB_REPO"
+      }
+    ]
+  },
+  "dependencies": {
+    "keytar": "7.9.0",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3",
+    "react-native-web": "^0.21.2"
+  }
+}

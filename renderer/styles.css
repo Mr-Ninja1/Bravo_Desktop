@@ -1,0 +1,255 @@
+*{box-sizing:border-box;font-family:Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial}
+:root{--footer-height:64px}
+html, body { height: 100%; overflow: hidden; }
+body{margin:0;background:#f4f7fb;color:#0f1724}
+#app{max-width:1600px;margin:0 auto;padding:18px;height:calc(100vh - var(--footer-height));display:flex;flex-direction:column;box-sizing:border-box;overflow:hidden;padding-bottom:12px}
+
+/* Splash screen gradient background */
+#splash{position:fixed;inset:0;background:linear-gradient(135deg, #22c1c3 0%, #185a9d 100%);display:flex;align-items:center;justify-content:center;z-index:9999}
+#splashContent{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:24px;text-align:center}
+#logoContainer{margin-bottom:12px}
+#splash img#logo{width:130px;height:110px;border-radius:24px;background:rgba(255,255,255,0.15);box-shadow:0 4px 12px rgba(0,0,0,0.18);object-fit:contain}
+#bravo{font-size:48px;font-weight:bold;color:#fff;letter-spacing:4px;margin:0;text-shadow:2px 2px 8px rgba(0,0,0,0.18)}
+#subtitle{font-size:18px;color:rgba(255,255,255,0.85);margin:0;letter-spacing:1px}
+#loadingMsg{font-size:16px;color:rgba(255,255,255,0.95);margin:0;letter-spacing:0.6px;min-height:20px;opacity:0;animation:fadeInOut 2s ease-in-out infinite}
+
+/* Spinner animation */
+.spinner{width:40px;height:40px;border:4px solid rgba(255,255,255,0.3);border-top:4px solid #fff;border-radius:50%;animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes fadeInOut{0%,100%{opacity:0}50%{opacity:1}}
+
+/* Hidden main content until splash closes */
+#main{display:none}
+
+/* Main app styles when splash is hidden */
+body.app-loaded #splash{display:none}
+body.app-loaded #main{display:block}
+
+/* Topbar layout */
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;height:56px;backdrop-filter: blur(8px);background:linear-gradient(180deg, rgba(255,255,255,0.75), rgba(245,248,255,0.6));border-bottom:1px solid rgba(2,6,23,0.06);-webkit-app-region: drag}
+.topbar .left{display:flex;align-items:center;gap:12px}
+.topbar .right{display:flex;align-items:center;gap:12px}
+.hamburger{background:transparent;border:none;font-size:22px;cursor:pointer;padding:8px;border-radius:8px}
+.hamburger:hover{background:rgba(2,6,23,0.04)}
+img#logoSmall{width:56px;height:56px;border-radius:10px}
+.topbar h2{margin:0;color:#072a63}
+.controls-visible{display:flex;gap:10px;align-items:center}
+.controls-visible input, .controls-visible select{padding:8px 10px;border-radius:10px;border:1px solid #e2e8f0;background:#fff;min-width:160px}
+.controls-visible button{background:#0b5bd7;color:#fff;border:none;padding:8px 12px;border-radius:10px;cursor:pointer;transition:background 0.2s ease}
+.controls-visible button:hover{background:#064a9f}
+
+/* Window controls (ensure buttons are clickable and not draggable) */
+.window-controls{display:flex;align-items:center;gap:6px;-webkit-app-region: no-drag}
+.window-btn{width:36px;height:28px;border-radius:6px;border:none;background:transparent;display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
+.window-btn .icon svg{width:16px;height:16px;fill:#0b1b2b}
+.window-btn.close{background:transparent}
+.window-btn.close:hover{background:rgba(220,38,38,0.12)}
+.window-btn:hover{background:rgba(2,6,23,0.04)}
+.window-btn .icon .icon-max{display:none}
+.window-btn.maximized .icon .icon-normal{display:none}
+.window-btn.maximized .icon .icon-max{display:inline}
+
+/* Ensure titlebar content doesn't push main content under it */
+#app{padding-top:8px}
+
+/* User area */
+.userInfo{display:flex;align-items:center;gap:8px;margin-right:8px}
+.userInfo img#userAvatar{width:36px;height:36px;border-radius:50%;object-fit:cover;border:2px solid #fff;box-shadow:0 2px 6px rgba(2,6,23,0.08)}
+.userInfo .userText{display:flex;flex-direction:column;text-align:left}
+.userInfo .small{font-size:12px;color:#475569}
+
+/* Side menu */
+.sideMenu{position:fixed;left:12px;top:72px;background:#fff;padding:12px;border-radius:12px;box-shadow:0 8px 24px rgba(2,6,23,0.12);display:none;z-index:10000}
+.sideMenu button{display:block;margin-bottom:8px;width:160px}
+/* overlay used when side menu is open to detect outside clicks */
+.sideMenuOverlay{position:fixed;inset:0;background:transparent;z-index:9998;display:none}
+
+/* make main take remaining space inside #app and keep its children from causing body scroll */
+#main{display:flex;flex-direction:column;height:100%;}
+main{display:grid;grid-template-columns:320px 1fr;gap:18px;margin-top:18px;height:100%;overflow:hidden}
+
+#listPane{background:#fff;padding:14px;border-radius:12px;box-shadow:0 6px 18px rgba(11,91,215,0.06);overflow:auto}
+/* Preview area: center the form and make it responsive to the window size
+	Keep a sensible max-width for readable pages and allow vertical scrolling
+	inside the preview so forms do not get clipped horizontally. */
+#previewPane{background:#fff;padding:14px;border-radius:12px;box-shadow:0 6px 18px rgba(11,91,215,0.04);display:flex;justify-content:center;align-items:flex-start;overflow:hidden}
+/* preview should fill available height and manage its own scrolling */
+#rnPreview{width:100%;max-width:1100px;height:100%;max-height:100%;overflow:auto;margin:0 auto;padding:12px;box-sizing:border-box;display:flex;justify-content:center;align-items:flex-start}
+#previewPane iframe#previewFrame{max-width:1100px;width:100%;height:100%;border:none;background:transparent}
+
+/* Aggressively hide any stray borders/lines inside the preview area */
+#previewPane, #previewPane * { border: none !important; box-shadow: none !important; outline: none !important; }
+#previewPane iframe { background: transparent !important; }
+#yearSidebar{display:flex;flex-direction:column;gap:12px}
+
+/* Make sidebar container positioned so toggle can be absolute */
+#yearSidebar{position:relative}
+
+/* top year chips row appears above the two-column layout and spans both columns */
+#yearRow{grid-column: 1 / -1; display:flex; margin-bottom:12px; padding:8px; gap:8px; overflow-x:auto}
+
+/* make the left list pane scrollable and single-column for cards */
+#listPane{height: calc(100vh - 140px); overflow:auto}
+#listPane .yearGrid{grid-template-columns:1fr}
+#yearSidebar{flex-direction:column;gap:12px}
+.yearCard{display:flex;justify-content:space-between;align-items:center;padding:12px;border-radius:12px;background:linear-gradient(90deg,#fff,#f7fbff);box-shadow:0 6px 18px rgba(11,91,215,0.03);border:1px solid #e6eefc}
+.yearCard .left{display:flex;flex-direction:column}
+.yearCard .yearTitle{font-weight:800;color:#072a63;font-size:18px}
+.yearCard .yearMeta{color:#64748b;font-size:13px}
+.yearCard .actions{display:flex;gap:8px}
+.yearCard .actions button{background:#0b5bd7;color:#fff;border:none;padding:8px 10px;border-radius:8px;cursor:pointer}
+.yearCard .actions button.secondary{background:#eef4ff;color:#0b5bd7}
+.yearGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px}
+.fileItem{padding:12px;border-bottom:1px solid #eef2f7;display:flex;justify-content:space-between;align-items:center}
+.fileItem .left{display:flex;flex-direction:column}
+.fileItem .fileName{font-weight:700;color:#072a63}
+.fileItem .meta{color:#64748b;font-size:12px}
+.fileItem .actions button{margin-left:8px;background:#e6eefc;border:none;padding:8px 10px;border-radius:8px;cursor:pointer}
+
+.card{background:#fff;border-radius:12px;padding:12px;margin-bottom:12px;box-shadow:0 6px 14px rgba(2,6,23,0.04)}
+.dateHeading{font-weight:800;color:#072a63;margin-top:12px;margin-bottom:8px}
+
+.formCard{background:linear-gradient(90deg,#fff,#fcfeff);border-radius:10px;padding:12px;box-shadow:0 6px 14px rgba(2,6,23,0.04);border:1px solid #eef4ff}
+.formTitle{font-weight:800;color:#08306b;margin-bottom:6px}
+.formMeta{color:#64748b;font-size:12px;margin-bottom:8px}
+.formActions button{background:#0b5bd7;color:#fff;border:none;padding:8px 10px;border-radius:8px;cursor:pointer}
+
+/* modal prompt fallback styling */
+.modalOverlay{position:fixed;inset:0;background:rgba(2,6,23,0.45);display:flex;align-items:center;justify-content:center}
+.modalBox{background:#fff;padding:18px;border-radius:12px;min-width:320px;max-width:720px}
+.modalActions{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}
+.modalBox button{background:#0b5bd7;color:#fff;border:none;padding:8px 12px;border-radius:8px;cursor:pointer}
+.modalBox button:hover{background:#064a9f}
+
+/* small helpers */
+.placeholder{color:#94a3b8}
+
+@media (max-width:900px){main{grid-template-columns:1fr;}}
+
+.previewFull main{grid-template-columns:320px 1fr}
+.previewCloseBtn{position:fixed;right:28px;top:24px;background:#0b5bd7;color:#fff;border:none;padding:8px 12px;border-radius:8px;cursor:pointer;z-index:12000;box-shadow:0 8px 24px rgba(2,6,23,0.12)}
+
+/* Hide the left list/sidebar and allow preview to expand */
+.sidebarHidden main{grid-template-columns:0px 1fr}
+/* keep the listPane in the DOM but visually collapse it to avoid reflow detach of children */
+.sidebarHidden #listPane{width:0;padding:0;visibility:hidden;overflow:hidden}
+.sidebarHidden #yearRow{display:none}
+.sidebarHidden #rnPreview{max-width:1400px;width:100%;min-width:0}
+.sidebarHidden #previewPane{padding:20px}
+
+/* Controls bar beneath the titlebar */
+.controlsBar{display:flex;justify-content:center;padding:12px 18px;background:transparent}
+.controls-visible{display:flex;justify-content:space-between;align-items:center;max-width:1200px;width:100%;background:linear-gradient(90deg, #ffffff, #f8fbff);padding:10px;border-radius:12px;box-shadow:0 6px 18px rgba(2,6,23,0.04);border:1px solid #e6eefc;gap:12px}
+.controls-left{display:flex;gap:10px;align-items:center;flex:1;min-width:0}
+.controls-right{display:flex;gap:8px;align-items:center;white-space:nowrap}
+.controls-visible input{flex:1;min-width:220px}
+.controls-visible button{background:#0b5bd7;color:#fff;border:none;padding:8px 12px;border-radius:8px;cursor:pointer;transition:background 0.12s ease}
+.controls-visible button.secondary{background:#eef4ff;color:#0b5bd7}
+.controls-visible select{padding:8px;border-radius:8px;border:1px solid #e6eefc;background:#fff}
+@media (max-width:980px){
+	.controls-visible{flex-wrap:wrap;row-gap:8px}
+	.controls-right{order:3;width:100%;justify-content:flex-end}
+	.controls-left{flex:1 1 60%;min-width:0}
+}
+
+/* Search & filter controls */
+/* date fields: make entire pill clickable and show calendar icon */
+.dateField{display:inline-flex;align-items:center;gap:8px;padding:8px 10px;border-radius:10px;border:1px solid #e6eefc;background:#fff;cursor:pointer}
+.dateField input[type="date"]{border:none;background:transparent;padding:0 4px;min-width:130px}
+.dateField .dateIcon{opacity:0.9}
+
+/* hide native date input edges to rely on our container styling on supported browsers */
+.dateField input::-webkit-calendar-picker-indicator{opacity:0;pointer-events:none}
+
+#dateFrom, #dateTo{min-width:120px;padding:6px;border-radius:6px}
+
+/* Footer styles */
+.app-footer{display:none;justify-content:space-between;align-items:center;padding:12px 18px;height:var(--footer-height);position:fixed;left:0;right:0;bottom:0;border-top:1px solid rgba(2,6,23,0.04);background:linear-gradient(180deg,#fff,#fbfdff);z-index:12000}
+.app-footer .devInfo{color:#64748b;font-size:13px}
+.app-footer .footerActions{display:flex;align-items:center;gap:10px}
+.app-footer img#dropboxIcon{width:20px;height:20px;opacity:0.5}
+.app-footer .dropbox-status{font-size:13px;color:#475569}
+/* When footer itself has the connected marker */
+.app-footer.dropbox-connected img#dropboxIcon{opacity:1}
+.app-footer.dropbox-connected .dropbox-status{color:#0b5bd7;font-weight:600}
+/* Slight accent for the connected footer to produce a subtle glow */
+.app-footer.dropbox-connected{box-shadow:0 12px 36px rgba(11,91,215,0.08);border-top-color:rgba(11,91,215,0.06)}
+
+/* Attention animation when Dropbox is NOT connected */
+.app-footer.attention{animation:footerPulse 2.4s ease-in-out infinite;box-shadow:0 12px 36px rgba(255,94,58,0.10);border-top-color:rgba(255,94,58,0.18)}
+@keyframes footerPulse{0%{transform:translateY(0)}50%{transform:translateY(-4px)}100%{transform:translateY(0)}}
+
+/* Subtle pulsing glow on connect button when attention required */
+.app-footer.attention button#connectDropbox{box-shadow:0 8px 30px rgba(255,94,58,0.14);transform:translateY(0);transition:transform 160ms ease}
+.app-footer.attention button#connectDropbox:hover{transform:translateY(-2px)}
+
+/* Connected state: modern/dropbox-powered visuals */
+body.dropbox-active .topbar{background:linear-gradient(90deg,#0b74ff33,#6dd3ff22);box-shadow:0 12px 40px rgba(11,91,215,0.08);border-bottom-color:rgba(11,91,215,0.06)}
+body.dropbox-active .controls-visible{background:linear-gradient(90deg,#f8fbff,#eef8ff);box-shadow:0 18px 60px rgba(11,91,215,0.08);border-color:transparent}
+body.dropbox-active .controls-visible button{box-shadow:0 10px 30px rgba(11,91,215,0.12);transition:transform 160ms ease,box-shadow 200ms ease}
+body.dropbox-active .controls-visible button:hover{transform:translateY(-3px);box-shadow:0 18px 48px rgba(11,91,215,0.16)}
+body.dropbox-active #previewPane{box-shadow:0 20px 80px rgba(11,91,215,0.06);border-radius:14px}
+body.dropbox-active #watermark{opacity:0.12;filter:grayscale(0%) saturate(1.15) contrast(1.02)}
+
+/* Small animated gradient accent behind the app when connected */
+body.dropbox-active::before{content:'';position:fixed;left:50%;top:8vh;transform:translateX(-50%);width:80vw;height:220px;z-index:0;border-radius:40px;background:radial-gradient(closest-side, rgba(11,91,215,0.06), transparent 50%);pointer-events:none}
+
+/* Show footer only after app has finished loading splash */
+body.app-loaded .app-footer{display:flex}
+
+/* Slight transition for major UI pieces when toggling state */
+.topbar,.controls-visible,#previewPane,#rnPreview{transition:all 320ms cubic-bezier(.2,.9,.2,1)}
+
+/* Search results list tweaks */
+.search-hit{padding:10px;border-radius:10px;border:1px solid #eef4ff;background:#fff;margin-bottom:8px;cursor:pointer}
+.search-hit .title{font-weight:700;color:#072a63}
+.search-hit .meta{font-size:12px;color:#64748b}
+.search-hit.highlight{box-shadow:0 6px 18px rgba(11,91,215,0.06);border-color:#cfe3ff}
+
+/* Centered search results inside rnPreview */
+.searchResultsCenter{width:100%;max-width:980px;margin:0 auto;display:flex;flex-direction:column;gap:10px;padding:18px}
+.searchResultsCenter .search-hit{background:#fff;border:1px solid #eef4ff;padding:12px;display:flex;justify-content:space-between;align-items:center}
+.searchResultsCenter .search-meta{font-size:12px;color:#64748b;margin-left:12px}
+.searchResultsCenter .search-actions button{background:#0b5bd7;color:#fff;border:none;padding:6px 10px;border-radius:8px;cursor:pointer}
+
+/* Quick filter chips */
+.chip{padding:6px 10px;border-radius:999px;border:1px solid #e6eefc;background:#fff;color:#0b5bd7;cursor:pointer;font-weight:600}
+.chip.active{background:#0b5bd7;color:#fff;border-color:transparent;box-shadow:0 6px 18px rgba(11,91,215,0.06)}
+.chip.small{padding:4px 8px;font-size:13px}
+
+/* Sidebar toggle button placed inside the sidebar (top-right) */
+.sidebar-toggle{position:absolute;right:8px;top:8px;background:transparent;border:none;font-size:18px;width:36px;height:36px;border-radius:6px;cursor:pointer;-webkit-app-region:no-drag;display:inline-flex;align-items:center;justify-content:center}
+.sidebar-toggle:hover{background:rgba(2,6,23,0.04)}
+
+/* small edge for hover-to-open when sidebar is hidden */
+.sidebar-edge{position:fixed;left:0;top:0;height:100%;width:8px;z-index:15000;display:none}
+.sidebarHidden .sidebar-edge{display:block}
+.sidebar-edge:hover{background:rgba(11,91,215,0.04);cursor:pointer}
+
+/* Inline button loading spinner (for click feedback) */
+button.loading{position:relative}
+button.loading::after{content:'';position:absolute;right:10px;top:50%;transform:translateY(-50%);width:14px;height:14px;border:2px solid rgba(255,255,255,0.6);border-top-color:#fff;border-radius:50%;animation:spin 0.9s linear infinite}
+
+/* watermark centered in the preview area */
+#previewPane{position:relative}
+#watermark{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);opacity:0.14;background-image:url('../assets/logo.jpeg');background-size:contain;background-repeat:no-repeat;background-position:center;width:70vmin;height:70vmin;pointer-events:none;z-index:2;filter:grayscale(100%) contrast(1.05) brightness(0.92)}
+/* ensure preview content sits above watermark */
+#previewPane > *{position:relative;z-index:3}
+
+/* Global full-screen iPhone-like spinner overlay */
+.global-spinner-overlay{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:40000;background:rgba(9,10,12,0.12);-webkit-backdrop-filter: blur(2px);backdrop-filter: blur(2px)}
+.global-spinner{width:58px;height:58px;border-radius:50%;display:inline-block;position:relative}
+.global-spinner .ring{position:absolute;inset:0;border-radius:50%;background:conic-gradient(#0b5bd7 0deg, #0b5bd7 90deg, rgba(11,91,215,0.15) 120deg, rgba(11,91,215,0.06) 180deg, rgba(11,91,215,0.02) 360deg);mask:radial-gradient(farthest-side, transparent calc(100% - 6px), black calc(100% - 5px));-webkit-mask:radial-gradient(farthest-side, transparent calc(100% - 6px), black calc(100% - 5px));animation:spin 1s linear infinite}
+.global-spinner .center{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,0.95);box-shadow:0 2px 8px rgba(2,6,23,0.08)}
+.global-spinner-message{margin-top:12px;color:#072a63;font-weight:600}
+.global-spinner-overlay.show{display:flex}
+
+/* Compact adjustments so preview aligns under controls */
+#previewPane{padding-top:22px}
+
+/* When restores are complete, hide restore buttons across the UI */
+.restoresHidden .restore-btn{display:none !important}
+.restore-btn{display:none}
+.showRestores .restore-btn{display:inline-block}
+.restoresHidden #yearSidebar .placeholder{display:none}
+.restoresHidden .yearCard .actions .secondary{margin-left:0}
