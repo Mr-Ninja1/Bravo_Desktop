@@ -8,13 +8,13 @@ export default function HotHoldingTemperaturePresentational({ payload }) {
   const logoUri = payload?.assets?.logoDataUri || null;
   const date = payload?.date || '';
 
-  const cellStyle = (w) => ({ width: w || undefined, padding: 6, borderRightWidth: 1, borderColor: '#333' });
 
   const sumWidths = (...keys) => keys.reduce((s, k) => s + (widths[k] || 0), 0);
   // Use fixed TABLE_WIDTH and COL_FLEX from the editable form so presentational matches editor
   // Increase TABLE_WIDTH so drawn signatures fit into SIGN columns; horizontal scroll will allow viewing the full table
   const TABLE_WIDTH = 1400; // widened table to accommodate signature thumbnails
-  const COL_FLEX = { INDEX: 0.6, FOOD_ITEM: 2.5, TIME_INTO_HOLD: 1.5, TIME_TEMP_SIGN: 1.0, STAFF_NAME: 2.0 };
+  // Reduce FOOD_ITEM flex and increase STAFF_NAME so food column doesn't push others
+  const COL_FLEX = { INDEX: 0.6, FOOD_ITEM: 0.9, TIME_INTO_HOLD: 1.5, TIME_TEMP_SIGN: 1.0, STAFF_NAME: 3.0 };
 
   // Compute deterministic WIDTHS from COL_FLEX and TABLE_WIDTH (matching editor)
   const totalFlex = COL_FLEX.INDEX + COL_FLEX.FOOD_ITEM + COL_FLEX.TIME_INTO_HOLD + (COL_FLEX.TIME_TEMP_SIGN * 9) + COL_FLEX.STAFF_NAME;
@@ -48,11 +48,11 @@ export default function HotHoldingTemperaturePresentational({ payload }) {
 
   // Adjust TIME/TEMP/SIGN to reasonable sizes and share width with STAFF_NAME so printed A4 landscape fits
   const timeKeys = ['TIME1','TEMP1','SIGN1','TIME2','TEMP2','SIGN2','TIME3','TEMP3','SIGN3'];
-  const minStaff = 120; // keep staff name readable when printed
+  const minStaff = 140; // keep staff name readable when printed
 
   // sensible defaults
   const idxWidth = Math.max(40, Math.round(widths.INDEX || colWidths[0] || 40));
-  const foodWidth = Math.max(180, Math.round(widths.FOOD_ITEM || colWidths[1] || 220));
+  const foodWidth = Math.max(140, Math.round(widths.FOOD_ITEM || colWidths[1] || 220));
   const timeIntoWidth = Math.max(120, Math.round(widths.TIME_INTO_HOLD || colWidths[2] || 150));
 
   // Weighted split for subcolumns (TIME, TEMP, SIGN) per record: 50% / 35% / 15%
@@ -90,7 +90,7 @@ export default function HotHoldingTemperaturePresentational({ payload }) {
   const allocatedTotal = colWidths.reduce((s, v) => s + v, 0);
   if (allocatedTotal === 0) {
     // fallback: distribute TABLE_WIDTH proportionally: make index small, food item bigger, staff bigger, time cols small
-    const idx = 40; const food = 260; const timeInto = 120; const timeEach = Math.floor((TABLE_WIDTH - idx - food - timeInto - 300) / 9) || 40; const staff = TABLE_WIDTH - (idx + food + timeInto + timeEach * 9);
+    const idx = 40; const food = 160; const timeInto = 120; const timeEach = Math.floor((TABLE_WIDTH - idx - food - timeInto - 300) / 9) || 40; const staff = TABLE_WIDTH - (idx + food + timeInto + timeEach * 9);
     const fallback = [idx, food, timeInto, timeEach, timeEach, timeEach, timeEach, timeEach, timeEach, timeEach, timeEach, timeEach, staff];
     for (let i = 0; i < colWidths.length; i++) colWidths[i] = fallback[i];
   } else {
@@ -121,8 +121,8 @@ export default function HotHoldingTemperaturePresentational({ payload }) {
   let total2 = colWidths2.reduce((s, v) => s + v, 0);
 
   // Cap staff name so it doesn't take most of the table; rebalance any excess to FOOD_ITEM
-  const MAX_STAFF = 160; // smaller cap so staff column isn't huge
-  const MIN_STAFF = 80;
+  const MAX_STAFF = 220; // allow staff column to be wider for long names
+  const MIN_STAFF = 120;
   let staffIdx = orderedCols.indexOf('STAFF_NAME');
   if (colWidths2[staffIdx] > MAX_STAFF) {
     const excess = colWidths2[staffIdx] - MAX_STAFF;
@@ -161,6 +161,21 @@ export default function HotHoldingTemperaturePresentational({ payload }) {
 
   // Reassign colWidths to colWidths2 for rendering
   for (let i = 0; i < colWidths.length; i++) colWidths[i] = colWidths2[i];
+
+  // No export-specific sizing: always render responsive percent widths
+
+  // cellStyle: when exporting use pixel widths; otherwise convert px->percent so table fits modal
+  const cellStyle = (w) => {
+    const pad = { padding: 6, borderRightWidth: 1, borderColor: '#333' };
+    try {
+      // Interpret numeric px as percent of TABLE_WIDTH so table fits modal
+      let pct = null;
+      if (typeof w === 'number') pct = (w / TABLE_WIDTH) * 100;
+      else pct = ((widths[w] || 0) / TABLE_WIDTH) * 100;
+      pct = Math.max(0, Math.round(pct * 100) / 100);
+      return Object.assign({ width: pct ? `${pct}%` : undefined }, pad);
+    } catch (e) { return Object.assign({ width: w || undefined }, pad); }
+  };
   // Helper: normalize signature-ish values into data: URIs (safe fallback)
   const normalizeSignature = (v) => {
     if (!v) return null;
@@ -195,9 +210,9 @@ export default function HotHoldingTemperaturePresentational({ payload }) {
 
       <View style={styles.tableTitleWrap}><Text style={styles.tableTitle}>HOT HOLDING TEMPERATURE LOG</Text></View>
 
-      {/* Allow horizontal scrolling for wide table so signature thumbs can fit */}
-      <ScrollView horizontal={true} contentContainerStyle={{ minWidth: TABLE_WIDTH }} showsHorizontalScrollIndicator={true}>
-        <View style={styles.table}>
+      {/* Table: use centered container when exporting, otherwise fit to available width */}
+    <View style={{ width: '100%' }}>
+      <View style={[styles.table, { width: '100%' } ]}>
         {/* Group header: spans for 1st/2nd/3rd record */}
         <View style={[styles.row, styles.groupHeader]}>
           <View style={cellStyle(colWidths[0])} />
@@ -245,7 +260,7 @@ export default function HotHoldingTemperaturePresentational({ payload }) {
               {(() => {
                 const uri = normalizeSignature(r.sign1);
                 return uri ? (
-                  <SignatureThumb uri={uri} width={Math.max(120, (widths.SIGN1 || colWidths[5]) - 8)} height={56} layers={6} spread={0.9} />
+                  <SignatureThumb uri={uri} width={Math.max(120, (colWidths[5] || widths.SIGN1 || 160) - 8)} height={56} layers={6} spread={0.9} />
                 ) : (
                   <Text style={styles.cellText}>{r.sign1 || ''}</Text>
                 );
@@ -258,7 +273,7 @@ export default function HotHoldingTemperaturePresentational({ payload }) {
               {(() => {
                 const uri = normalizeSignature(r.sign2);
                 return uri ? (
-                  <SignatureThumb uri={uri} width={Math.max(120, (widths.SIGN2 || colWidths[8]) - 8)} height={56} layers={6} spread={0.9} />
+                  <SignatureThumb uri={uri} width={Math.max(120, (colWidths[8] || widths.SIGN2 || 160) - 8)} height={56} layers={6} spread={0.9} />
                 ) : (
                   <Text style={styles.cellText}>{r.sign2 || ''}</Text>
                 );
@@ -271,7 +286,7 @@ export default function HotHoldingTemperaturePresentational({ payload }) {
               {(() => {
                 const uri = normalizeSignature(r.sign3);
                 return uri ? (
-                  <SignatureThumb uri={uri} width={Math.max(120, (widths.SIGN3 || colWidths[11]) - 8)} height={56} layers={6} spread={0.9} />
+                  <SignatureThumb uri={uri} width={Math.max(120, (colWidths[11] || widths.SIGN3 || 160) - 8)} height={56} layers={6} spread={0.9} />
                 ) : (
                   <Text style={styles.cellText}>{r.sign3 || ''}</Text>
                 );
@@ -282,7 +297,7 @@ export default function HotHoldingTemperaturePresentational({ payload }) {
           </View>
         ))}
         </View>
-      </ScrollView>
+      </View>
 
       {/* Footer area to match editable form */}
       <View style={styles.footerWrap}>

@@ -1,6 +1,14 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const shell = require('electron').shell;
+// Enable electron reload in development for faster iteration
+if (process.env.NODE_ENV !== 'production') {
+  try {
+    require('electron-reload')(__dirname, { electron: require('electron') });
+  } catch (e) {
+    // ignore if electron-reload isn't installed
+  }
+}
 // Attempt to load electron-updater if available (safe, non-fatal if missing)
 let _autoUpdater = null;
 try {
@@ -175,7 +183,7 @@ ipcMain.handle('generate-form-html', async (event, payloadWrapper) => {
     // Try to find a matching exporter under src/exporters/html by filename
     try {
       const fs = require('fs');
-      const exportersDir = path.join(__dirname, '..', 'src', 'exporters', 'html');
+      const exportersDir = path.join(__dirname, 'src', 'exporters', 'html');
       const files = fs.readdirSync(exportersDir).filter(f => f && f.toLowerCase().endsWith('.js'));
       for (const f of files) {
         try {
@@ -183,6 +191,7 @@ ipcMain.handle('generate-form-html', async (event, payloadWrapper) => {
           if (!base) continue;
           if (type.indexOf(base) !== -1 || base.indexOf(type) !== -1) {
             const modPath = path.join(exportersDir, f);
+            try { delete require.cache[require.resolve(modPath)]; } catch (e) {}
             const gen = require(modPath);
             // module may export default or module.exports
             const fn = gen && (gen.default || gen) ;
@@ -208,7 +217,7 @@ ipcMain.handle('export-form-pdf', async (event, payloadWrapper, opts = {}) => {
   try {
     const fs = require('fs');
     const os = require('os');
-    const exportersDir = path.join(__dirname, '..', 'src', 'exporters', 'html');
+    const exportersDir = path.join(__dirname, 'src', 'exporters', 'html');
     const p = payloadWrapper && payloadWrapper.payload ? payloadWrapper.payload : payloadWrapper || {};
     const type = (p.formType || p.title || p.name || '').toString().replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
 
@@ -222,6 +231,7 @@ ipcMain.handle('export-form-pdf', async (event, payloadWrapper, opts = {}) => {
           if (!base) continue;
           if (type.indexOf(base) !== -1 || base.indexOf(type) !== -1) {
             const modPath = path.join(exportersDir, f);
+            try { delete require.cache[require.resolve(modPath)]; } catch (e) {}
             const gen = require(modPath);
             const fn = gen && (gen.default || gen);
             if (typeof fn === 'function') {
@@ -253,8 +263,8 @@ ipcMain.handle('export-form-pdf', async (event, payloadWrapper, opts = {}) => {
     // produced PDF without changing the logical page size.
     try { await win.webContents.setZoomFactor(2); } catch (e) {}
 
-    // Use printToPDF; options: A4, orientation
-    const landscape = Boolean(opts.landscape || opts.orientation === 'landscape');
+    // Use printToPDF; default to landscape for all exports unless caller overrides
+    const landscape = (opts && typeof opts.landscape === 'boolean') ? opts.landscape : true;
     const pdfOptions = { printBackground: true, landscape, pageSize: 'A4' };
     const data = await win.webContents.printToPDF(pdfOptions);
     await fs.promises.writeFile(outPath, data);
@@ -264,69 +274,7 @@ ipcMain.handle('export-form-pdf', async (event, payloadWrapper, opts = {}) => {
 });
 
 // Accept a captured PNG dataURL from renderer, embed it in a minimal HTML, and print to A4 PDF
-ipcMain.handle('save-capture-png-as-pdf', async (event, payload) => {
-  try {
-    const fs = require('fs');
-    const dataUrl = payload && payload.dataUrl;
-    if (!dataUrl || !dataUrl.startsWith('data:')) return { ok: false, error: 'Invalid dataUrl' };
-    const baseName = (payload && payload.name) ? payload.name.toString().replace(/[^a-z0-9\-\_\.]/ig, '_') : `capture-${Date.now()}`;
-    const userDocs = path.join(app.getPath('documents') || process.cwd());
-    const outDir = path.join(userDocs, EXPORT_DIR_NAME);
-    try { fs.mkdirSync(outDir, { recursive: true }); } catch (e) {}
-    const outPath = path.join(outDir, `${baseName}-${Date.now()}.pdf`);
-
-    // Force the embedded image to fill A4 width so exported forms don't appear tiny
-    const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;padding:0;background:#fff}img{display:block;width:210mm;height:auto}</style></head><body><img src="${dataUrl}"/></body></html>`;
-
-    const win = new BrowserWindow({ show: false, webPreferences: { sandbox: false } });
-    await win.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
-    // Increase raster resolution before printing embedded capture
-    try { await win.webContents.setZoomFactor(2); } catch (e) {}
-    // Decide orientation: prefer explicit flag, else infer from image dimensions
-    let landscape = Boolean(payload && payload.landscape);
-    try {
-      if (!landscape && payload && payload.width && payload.height) landscape = payload.width > payload.height;
-    } catch (e) {}
-    // Request higher raster scale and no margins so the embedded PNG is
-    // rasterized at higher fidelity in the resulting PDF.
-    const pdfOptions = { printBackground: true, landscape, pageSize: 'A4', marginsType: 0, scale: 2 };
-    const pdf = await win.webContents.printToPDF(pdfOptions);
-    await fs.promises.writeFile(outPath, pdf);
-    try { win.destroy(); } catch (e) {}
-    return { ok: true, pdfPath: outPath };
-  } catch (e) { return { ok: false, error: String(e) }; }
-});
-
-// Accept multiple captured PNG dataURLs and create a multi-page A4 PDF
-ipcMain.handle('save-capture-pages-as-pdf', async (event, payload) => {
-  try {
-    const fs = require('fs');
-    const pages = payload && payload.pages && Array.isArray(payload.pages) ? payload.pages : [];
-    if (!pages.length) return { ok: false, error: 'No pages provided' };
-    const baseName = (payload && payload.name) ? payload.name.toString().replace(/[^a-z0-9\-\_\.]/ig, '_') : `capture-${Date.now()}`;
-    const userDocs = path.join(app.getPath('documents') || process.cwd());
-    const outDir = path.join(userDocs, EXPORT_DIR_NAME);
-    try { fs.mkdirSync(outDir, { recursive: true }); } catch (e) {}
-    const outPath = path.join(outDir, `${baseName}-${Date.now()}.pdf`);
-
-    // Build HTML with one A4-sized container per page. Each image is set to 210mm width
-    // so it fills the page; page-breaks force new pages in printToPDF.
-    let body = '';
-    pages.forEach((d, idx) => {
-      body += `<div style="width:210mm;height:297mm;box-sizing:border-box;overflow:hidden;page-break-after:always;background:#fff"><img src=\"${d}\" style=\"width:210mm;height:auto;display:block;\"/></div>`;
-    });
-    const html = `<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><style>body{margin:0;padding:0;background:#fff}</style></head><body>${body}</body></html>`;
-
-    const win = new BrowserWindow({ show: false, webPreferences: { sandbox: false } });
-    await win.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
-    try { await win.webContents.setZoomFactor(2); } catch (e) {}
-    const pdfOptions = { printBackground: true, landscape: Boolean(payload && payload.landscape), pageSize: 'A4' };
-    const pdf = await win.webContents.printToPDF(pdfOptions);
-    await fs.promises.writeFile(outPath, pdf);
-    try { win.destroy(); } catch (e) {}
-    return { ok: true, pdfPath: outPath };
-  } catch (e) { return { ok: false, error: String(e) }; }
-});
+// Legacy capture-to-pdf handlers removed to enforce server-side printToPDF exporter only.
 
 // Delete a local imported/restored form entry and remove files
 ipcMain.handle('delete-local-form', async (event, filePath) => {

@@ -6,8 +6,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   generateFormHtml: (payload) => ipcRenderer.invoke('generate-form-html', payload),
     // Export helpers: export via server-side generator or send a captured PNG to main to save as PDF
     exportFormPdf: (payloadWrapper, opts) => ipcRenderer.invoke('export-form-pdf', payloadWrapper, opts),
-    saveCapturePngAsPdf: (capturePayload) => ipcRenderer.invoke('save-capture-png-as-pdf', capturePayload),
-    saveCapturePagesAsPdf: (pagesPayload) => ipcRenderer.invoke('save-capture-pages-as-pdf', pagesPayload),
   drive: {
     signIn: () => ipcRenderer.invoke('drive-signin'),
     signOut: () => ipcRenderer.invoke('drive-signout'),

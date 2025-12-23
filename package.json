@@ -7,12 +7,17 @@
   "scripts": {
     "start": "electron .",
     "build-renderer": "node build-renderer.js",
+    "dev:watch": "npx esbuild renderer/react-entry.jsx --bundle --outfile=renderer/dist/bundle.js --platform=browser --sourcemap --loader:.js=jsx --watch --define:process.env.NODE_ENV=\"development\"",
+    "dev:electron": "electron .",
+    "dev": "npx concurrently \"npm run dev:watch\" \"npm run dev:electron\"",
     "dist": "electron-builder"
   },
   "devDependencies": {
     "electron": "^25.0.0",
     "electron-builder": "^26.0.12",
-    "esbuild": "^0.18.20"
+    "esbuild": "^0.18.20",
+    "concurrently": "^8.0.1",
+    "electron-reload": "^1.5.0"
   },
   "build": {
     "appId": "com.example.checklistapp",

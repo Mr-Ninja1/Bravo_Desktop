@@ -2,13 +2,16 @@ import React from 'react';
 import { View, Text, ScrollView, StyleSheet, Image } from 'react-native';
 import SignatureThumb from '../../components/SignatureThumb';
 
-export default function DeepFreezerTemperaturePresentational({ payload }) {
+export default function DeepFreezerTemperaturePresentational({ payload, exportingWide = false }) {
   if (!payload) return null;
   const p = payload.payload || payload;
   const { metadata = {}, formData = [], layoutHints = {}, _tableWidth } = p;
   const rows = formData && formData.length ? formData : (p.rows || []);
 
-  const WIDTHS = (layoutHints && layoutHints.WIDTHS) || {
+  // Respect `exportingWide` passed directly or as a payload flag
+  const effectiveExporting = exportingWide || (payload && (payload.__exportingWide || (payload.payload && payload.payload.__exportingWide))) || false;
+
+  const COL_WEIGHTS = (layoutHints && layoutHints.WIDTHS) || {
     DATE: 60,
     TEMP: 80,
     SIGN: 120,
@@ -19,17 +22,42 @@ export default function DeepFreezerTemperaturePresentational({ payload }) {
     HSEQ_SIGN: 140,
   };
 
-  const COL = WIDTHS;
+  // Use flexible column sizing so the modal width decides export sizing.
+  // We also support an `exportingWide` flow which will compute a scaled
+  // fixed width layout (like KitchenWeekly) to avoid ScrollView clipping
+  // when html2canvas captures the DOM.
+  const TOTAL_WEIGHT = Object.values(COL_WEIGHTS).reduce((s, v) => s + (Number(v) || 0), 0) || 1;
 
-  const TOTAL = Object.values(COL).reduce((s, v) => s + (Number(v) || 0), 0) || 1;
-  const colStyle = (w) => {
-    const width = Number(w) || 0;
-    const flex = width / TOTAL;
-    const min = Math.max(36, Math.round(width * 0.18));
-    return { flex, minWidth: min, flexShrink: 1 };
+  // Compute table widths and optional export scaling
+  const baseTableWidth = Object.values(COL_WEIGHTS).reduce((s, v) => s + (Number(v) || 0), 0) || 1;
+  const TABLE_W = Number(_tableWidth) || baseTableWidth;
+  const EXPORT_WIDTH = 900;
+  let scale = 1;
+  let tableW = TABLE_W;
+  if (effectiveExporting && TABLE_W > EXPORT_WIDTH) {
+    scale = EXPORT_WIDTH / TABLE_W;
+    tableW = EXPORT_WIDTH;
+  }
+
+  const adjustedWeights = {};
+  Object.keys(COL_WEIGHTS).forEach(k => { adjustedWeights[k] = Math.max(1, Math.round((Number(COL_WEIGHTS[k]||0) || 0) * scale)); });
+
+  const getColStyle = (keys) => {
+    const keysArray = Array.isArray(keys) ? keys : [keys];
+    if (effectiveExporting) {
+      const widthSum = keysArray.reduce((s, k) => s + (Number(adjustedWeights[k] || 0)), 0) || 0;
+      return { width: widthSum, minWidth: widthSum, justifyContent: 'center', borderRightWidth: 1, borderRightColor: '#cbd5e1', paddingHorizontal: 4 };
+    }
+    const weightSum = keysArray.reduce((s, k) => s + (Number(COL_WEIGHTS[k] || 0)), 0);
+    return { flex: weightSum / TOTAL_WEIGHT, justifyContent: 'center', borderRightWidth: 1, borderRightColor: '#cbd5e1', paddingHorizontal: 4 };
   };
-  const sigWidthFor = (w) => Math.min(160, Math.max(64, Math.round((Number(w) || 120) * 0.8)));
-  const sigHeightFor = (w) => Math.max(40, Math.round((Number(w) || 120) * 0.5));
+
+  const sigWidthFor = (key) => {
+    const base = Number(COL_WEIGHTS[key] || 120) || 120;
+    const w = effectiveExporting ? (adjustedWeights[key] || Math.round(base * scale)) : base;
+    return Math.min(160, Math.max(48, Math.round(w * 0.8)));
+  };
+  const sigHeightFor = (w) => Math.max(36, Math.round((Number(w) || 120) * 0.5));
 
   const rowsToRender = rows && rows.length ? rows : Array.from({ length: 31 }, (_, i) => ({ day: i + 1 }));
 
@@ -55,13 +83,19 @@ export default function DeepFreezerTemperaturePresentational({ payload }) {
     }
   };
 
-  const TABLE_WIDTH = COL.DATE + (COL.TEMP + COL.SIGN) * 3 + COL.CORRECTIVE_ACTION + COL.SUP_NAME_SIGN + COL.COMPLEX_SIGN + COL.FSC_SIGN + COL.HSEQ_SIGN;
+  // remove any fixed TABLE_WIDTH — export width will be determined by the modal
+  // const TABLE_WIDTH = COL.DATE + (COL.TEMP + COL.SIGN) * 3 + COL.CORRECTIVE_ACTION + COL.SUP_NAME_SIGN + COL.COMPLEX_SIGN + COL.FSC_SIGN + COL.HSEQ_SIGN;
 
   // Use freezerName from metadata only (no fallback to subject)
   const freezerName = metadata.freezerName || '';
 
+  const exportWrapperStyle = { padding: 0, margin: 0, backgroundColor: '#fff' };
+  const exportA4Style = effectiveExporting ? { width: tableW, minWidth: tableW } : {};
+  const Wrapper = effectiveExporting ? View : ScrollView;
+  const wrapperProps = effectiveExporting ? { style: { ...exportWrapperStyle, width: tableW } } : { contentContainerStyle: styles.container };
+
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <Wrapper {...wrapperProps}>
       <View style={styles.card}>
         {/* Branding row: logo + company name on top-left above all content */}
         <View style={styles.brandingRowTop}>
@@ -104,89 +138,89 @@ export default function DeepFreezerTemperaturePresentational({ payload }) {
           <Text style={styles.instructionText}><Text style={{ fontWeight: '800' }}>Instruction:</Text> {metadata.instruction || 'The temperature of the Deep Freezer should be less than -18°C and not fall below -12°C.'}</Text>
         </View>
 
-        <View style={styles.tableWrap}>
+        <View style={[styles.tableWrap, exportA4Style]}>
           <View style={[styles.tableGroupHeader]}> 
-            <View style={[styles.hCellFixed, colStyle(COL.DATE)]}><Text style={styles.hText}>DATE</Text></View>
-            <View style={[styles.hGroupCell, colStyle(COL.TEMP + COL.SIGN)]}><Text style={styles.hText}>MORNING</Text></View>
-            <View style={[styles.hGroupCell, colStyle(COL.TEMP + COL.SIGN)]}><Text style={styles.hText}>AFTERNOON</Text></View>
-            <View style={[styles.hGroupCell, colStyle(COL.TEMP + COL.SIGN)]}><Text style={styles.hText}>EVENING</Text></View>
-            <View style={[styles.hCellFixed, colStyle(COL.CORRECTIVE_ACTION)]}><Text style={styles.hText}>IF TEMPERATURE IS OUT OF SPECIFICATION, WHAT WAS DONE ABOUT IT?</Text></View>
-            <View style={[styles.hCellFixed, colStyle(COL.SUP_NAME_SIGN)]}><Text style={styles.hText}>SUP SIGN</Text></View>
-            <View style={[styles.hCellFixed, colStyle(COL.COMPLEX_SIGN)]}><Text style={styles.hText}>COMPLEX SIGN</Text></View>
-            <View style={[styles.hCellFixed, colStyle(COL.FSC_SIGN)]}><Text style={styles.hText}>FSC SIGN</Text></View>
-            <View style={[styles.hCellFixed, colStyle(COL.HSEQ_SIGN)]}><Text style={styles.hText}>HSEQ SIGN</Text></View>
+            <View style={[styles.hCellFixed, getColStyle('DATE')]}><Text style={styles.hText}>DATE</Text></View>
+            <View style={[styles.hGroupCell, getColStyle(['TEMP','SIGN'])]}><Text style={styles.hText}>MORNING</Text></View>
+            <View style={[styles.hGroupCell, getColStyle(['TEMP','SIGN'])]}><Text style={styles.hText}>AFTERNOON</Text></View>
+            <View style={[styles.hGroupCell, getColStyle(['TEMP','SIGN'])]}><Text style={styles.hText}>EVENING</Text></View>
+            <View style={[styles.hCellFixed, getColStyle('CORRECTIVE_ACTION')]}><Text style={styles.hText}>IF TEMPERATURE IS OUT OF SPECIFICATION, WHAT WAS DONE ABOUT IT?</Text></View>
+            <View style={[styles.hCellFixed, getColStyle('SUP_NAME_SIGN')]}><Text style={styles.hText}>SUP SIGN</Text></View>
+            <View style={[styles.hCellFixed, getColStyle('COMPLEX_SIGN')]}><Text style={styles.hText}>COMPLEX SIGN</Text></View>
+            <View style={[styles.hCellFixed, getColStyle('FSC_SIGN')]}><Text style={styles.hText}>FSC SIGN</Text></View>
+            <View style={[styles.hCellFixed, getColStyle('HSEQ_SIGN')]}><Text style={styles.hText}>HSEQ SIGN</Text></View>
           </View>
 
           <View style={[styles.tableHeaderRow, styles.detailHeader]}>
-            <View style={[styles.hCellFixed, colStyle(COL.DATE)]} />
-            <View style={[styles.hCellFixed, colStyle(COL.TEMP)]}><Text style={styles.hText}>TEMP</Text></View>
-            <View style={[styles.hCellFixed, colStyle(COL.SIGN)]}><Text style={styles.hText}>STAFF SIGN</Text></View>
-            <View style={[styles.hCellFixed, colStyle(COL.TEMP)]}><Text style={styles.hText}>TEMP</Text></View>
-            <View style={[styles.hCellFixed, colStyle(COL.SIGN)]}><Text style={styles.hText}>STAFF SIGN</Text></View>
-            <View style={[styles.hCellFixed, colStyle(COL.TEMP)]}><Text style={styles.hText}>TEMP</Text></View>
-            <View style={[styles.hCellFixed, colStyle(COL.SIGN)]}><Text style={styles.hText}>STAFF SIGN</Text></View>
-            <View style={[styles.hCellFixed, colStyle(COL.CORRECTIVE_ACTION)]} />
-            <View style={[styles.hCellFixed, colStyle(COL.SUP_NAME_SIGN)]} />
-            <View style={[styles.hCellFixed, colStyle(COL.COMPLEX_SIGN)]} />
-            <View style={[styles.hCellFixed, colStyle(COL.FSC_SIGN)]} />
-            <View style={[styles.hCellFixed, colStyle(COL.HSEQ_SIGN)]} />
+            <View style={[styles.hCellFixed, getColStyle('DATE')]} />
+            <View style={[styles.hCellFixed, getColStyle('TEMP')]}><Text style={styles.hText}>TEMP</Text></View>
+            <View style={[styles.hCellFixed, getColStyle('SIGN')]}><Text style={styles.hText}>STAFF SIGN</Text></View>
+            <View style={[styles.hCellFixed, getColStyle('TEMP')]}><Text style={styles.hText}>TEMP</Text></View>
+            <View style={[styles.hCellFixed, getColStyle('SIGN')]}><Text style={styles.hText}>STAFF SIGN</Text></View>
+            <View style={[styles.hCellFixed, getColStyle('TEMP')]}><Text style={styles.hText}>TEMP</Text></View>
+            <View style={[styles.hCellFixed, getColStyle('SIGN')]}><Text style={styles.hText}>STAFF SIGN</Text></View>
+            <View style={[styles.hCellFixed, getColStyle('CORRECTIVE_ACTION')]} />
+            <View style={[styles.hCellFixed, getColStyle('SUP_NAME_SIGN')]} />
+            <View style={[styles.hCellFixed, getColStyle('COMPLEX_SIGN')]} />
+            <View style={[styles.hCellFixed, getColStyle('FSC_SIGN')]} />
+            <View style={[styles.hCellFixed, getColStyle('HSEQ_SIGN')]} />
           </View>
 
           {rowsToRender.map((r, ri) => (
             <View key={ri} style={styles.row}>
-              <View style={[styles.cellFixed, colStyle(COL.DATE)]}><Text style={styles.cellText}>{ordinal(r.day || (ri + 1))}</Text></View>
+              <View style={[styles.cellFixed, getColStyle('DATE')]}><Text style={styles.cellText}>{ordinal(r.day || (ri + 1))}</Text></View>
 
-              <View style={[styles.cellFixed, colStyle(COL.TEMP)]}><Text style={styles.cellText}>{r.tempMorning || ''}</Text></View>
-              <View style={[styles.cellFixed, colStyle(COL.SIGN)]}>{(() => {
-                const v = r.staffSignMorning;
-                const uri = normalizeSignature(v);
-                const sw = sigWidthFor(COL.SIGN);
-                return uri ? <SignatureThumb uri={uri} width={sw} height={sigHeightFor(sw)} layers={5} spread={0.8} /> : <Text style={styles.cellText}>{v || ''}</Text>;
-              })()}</View>
+                <View style={[styles.cellFixed, getColStyle('TEMP')]}><Text style={styles.cellText}>{r.tempMorning || ''}</Text></View>
+                <View style={[styles.cellFixed, getColStyle('SIGN')]}>{(() => {
+                  const v = r.staffSignMorning;
+                  const uri = normalizeSignature(v);
+                  const sw = sigWidthFor('SIGN');
+                  return uri ? <SignatureThumb uri={uri} width={sw} height={sigHeightFor(sw)} layers={5} spread={0.8} /> : <Text style={styles.cellText}>{v || ''}</Text>;
+                })()}</View>
 
-              <View style={[styles.cellFixed, colStyle(COL.TEMP)]}><Text style={styles.cellText}>{r.tempAfternoon || ''}</Text></View>
-              <View style={[styles.cellFixed, colStyle(COL.SIGN)]}>{(() => {
-                const v = r.staffSignAfternoon;
-                const uri = normalizeSignature(v);
-                const sw = sigWidthFor(COL.SIGN);
-                return uri ? <SignatureThumb uri={uri} width={sw} height={sigHeightFor(sw)} layers={5} spread={0.8} /> : <Text style={styles.cellText}>{v || ''}</Text>;
-              })()}</View>
+                <View style={[styles.cellFixed, getColStyle('TEMP')]}><Text style={styles.cellText}>{r.tempAfternoon || ''}</Text></View>
+                <View style={[styles.cellFixed, getColStyle('SIGN')]}>{(() => {
+                  const v = r.staffSignAfternoon;
+                  const uri = normalizeSignature(v);
+                  const sw = sigWidthFor('SIGN');
+                  return uri ? <SignatureThumb uri={uri} width={sw} height={sigHeightFor(sw)} layers={5} spread={0.8} /> : <Text style={styles.cellText}>{v || ''}</Text>;
+                })()}</View>
 
-              <View style={[styles.cellFixed, colStyle(COL.TEMP)]}><Text style={styles.cellText}>{r.tempEvening || ''}</Text></View>
-              <View style={[styles.cellFixed, colStyle(COL.SIGN)]}>{(() => {
-                const v = r.staffSignEvening;
-                const uri = normalizeSignature(v);
-                const sw = sigWidthFor(COL.SIGN);
-                return uri ? <SignatureThumb uri={uri} width={sw} height={sigHeightFor(sw)} layers={5} spread={0.8} /> : <Text style={styles.cellText}>{v || ''}</Text>;
-              })()}</View>
+                <View style={[styles.cellFixed, getColStyle('TEMP')]}><Text style={styles.cellText}>{r.tempEvening || ''}</Text></View>
+                <View style={[styles.cellFixed, getColStyle('SIGN')]}>{(() => {
+                  const v = r.staffSignEvening;
+                  const uri = normalizeSignature(v);
+                  const sw = sigWidthFor('SIGN');
+                  return uri ? <SignatureThumb uri={uri} width={sw} height={sigHeightFor(sw)} layers={5} spread={0.8} /> : <Text style={styles.cellText}>{v || ''}</Text>;
+                })()}</View>
 
-              <View style={[styles.cellFixed, colStyle(COL.CORRECTIVE_ACTION)]}><Text style={styles.cellText}>{r.outOfSpecAction || ''}</Text></View>
-              <View style={[styles.cellFixed, colStyle(COL.SUP_NAME_SIGN)]}>{(() => {
-                const v = r.supNameSign;
-                const uri = normalizeSignature(v);
-                const sw = sigWidthFor(COL.SUP_NAME_SIGN);
-                return uri ? <SignatureThumb uri={uri} width={sw} height={sigHeightFor(sw)} layers={6} spread={0.9} /> : <Text style={styles.cellText}>{v || ''}</Text>;
-              })()}</View>
-              <View style={[styles.cellFixed, colStyle(COL.COMPLEX_SIGN)]}>{(() => {
-                const v = r.complexManagerSign;
-                const uri = normalizeSignature(v);
-                const sw = sigWidthFor(COL.COMPLEX_SIGN);
-                return uri ? <SignatureThumb uri={uri} width={sw} height={sigHeightFor(sw)} layers={6} spread={0.9} /> : <Text style={styles.cellText}>{v || ''}</Text>;
-              })()}</View>
+                <View style={[styles.cellFixed, getColStyle('CORRECTIVE_ACTION')]}><Text style={styles.cellText}>{r.outOfSpecAction || ''}</Text></View>
+                <View style={[styles.cellFixed, getColStyle('SUP_NAME_SIGN')]}>{(() => {
+                  const v = r.supNameSign;
+                  const uri = normalizeSignature(v);
+                  const sw = sigWidthFor('SUP_NAME_SIGN');
+                  return uri ? <SignatureThumb uri={uri} width={sw} height={sigHeightFor(sw)} layers={6} spread={0.9} /> : <Text style={styles.cellText}>{v || ''}</Text>;
+                })()}</View>
+                <View style={[styles.cellFixed, getColStyle('COMPLEX_SIGN')]}>{(() => {
+                  const v = r.complexManagerSign;
+                  const uri = normalizeSignature(v);
+                  const sw = sigWidthFor('COMPLEX_SIGN');
+                  return uri ? <SignatureThumb uri={uri} width={sw} height={sigHeightFor(sw)} layers={6} spread={0.9} /> : <Text style={styles.cellText}>{v || ''}</Text>;
+                })()}</View>
 
-              <View style={[styles.cellFixed, colStyle(COL.FSC_SIGN)]}>{(() => {
-                const v = r.fscSign;
-                const uri = normalizeSignature(v);
-                const sw = sigWidthFor(COL.FSC_SIGN);
-                return uri ? <SignatureThumb uri={uri} width={sw} height={sigHeightFor(sw)} layers={6} spread={0.9} /> : <Text style={styles.cellText}>{v || ''}</Text>;
-              })()}</View>
+                <View style={[styles.cellFixed, getColStyle('FSC_SIGN')]}>{(() => {
+                  const v = r.fscSign;
+                  const uri = normalizeSignature(v);
+                  const sw = sigWidthFor('FSC_SIGN');
+                  return uri ? <SignatureThumb uri={uri} width={sw} height={sigHeightFor(sw)} layers={6} spread={0.9} /> : <Text style={styles.cellText}>{v || ''}</Text>;
+                })()}</View>
 
-              <View style={[styles.cellFixed, colStyle(COL.HSEQ_SIGN)]}>{(() => {
-                const v = r.hseqManagerSign;
-                const uri = normalizeSignature(v);
-                const sw = sigWidthFor(COL.HSEQ_SIGN);
-                return uri ? <SignatureThumb uri={uri} width={sw} height={sigHeightFor(sw)} layers={6} spread={0.9} /> : <Text style={styles.cellText}>{v || ''}</Text>;
-              })()}</View>
+                <View style={[styles.cellFixed, getColStyle('HSEQ_SIGN')]}>{(() => {
+                  const v = r.hseqManagerSign;
+                  const uri = normalizeSignature(v);
+                  const sw = sigWidthFor('HSEQ_SIGN');
+                  return uri ? <SignatureThumb uri={uri} width={sw} height={sigHeightFor(sw)} layers={6} spread={0.9} /> : <Text style={styles.cellText}>{v || ''}</Text>;
+                })()}</View>
             </View>
           ))}
         </View>
@@ -198,7 +232,7 @@ export default function DeepFreezerTemperaturePresentational({ payload }) {
          
         </View>
       </View>
-    </ScrollView>
+    </Wrapper>
   );
 }
 

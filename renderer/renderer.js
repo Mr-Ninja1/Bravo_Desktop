@@ -741,33 +741,26 @@ async function openEntryModal(entry) {
     // Export logic (kept inline to preserve behavior)
     exportBtn.addEventListener('click', async () => {
       try {
-        // export logic copied from earlier implementation
-        const clearTransforms = (el) => {
-          try { if (!el || !el.style) return; el.style.transform = ''; el.style.transformOrigin = ''; } catch (e) {}
-          try { Array.from(el.children || []).forEach(child => clearTransforms(child)); } catch (e) {}
-        };
-        try { clearTransforms(modal); } catch (e) {}
-
         exportBtn.disabled = true; exportBtn.innerText = 'Preparing...';
-        if (typeof window.html2canvas !== 'function') {
-          await new Promise((resolve, reject) => {
-            const s = document.createElement('script');
-            s.src = 'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js';
-            s.onload = () => resolve();
-            s.onerror = (e) => reject(e);
-            document.head.appendChild(s);
-          });
-        }
         try { showSpinner('Preparing export...'); } catch (e) {}
-        await new Promise(r => setTimeout(r, 260));
 
-        const wrapper = mount;
-        if (!wrapper) throw new Error('Preview mount not found');
-        exportBtn.innerText = 'Exporting...';
-        // maximize, render adjustments, capture, slicing and IPC calls follow (omitted here for brevity)
-        // We'll reuse the existing modal export logic already present elsewhere; for now call the export flow via existing UI by simulating a click on the exported element if available.
-        showNotification('Export', 'Export from modal initiated', 'success');
-      } catch (e) { console.error('export failed', e); showNotification('Export failed', String(e), 'error'); } finally { try { exportBtn.disabled = false; exportBtn.innerText = 'Export PDF'; } catch (e) {} try { hideSpinner(); } catch (e) {} }
+        if (window.electronAPI && typeof window.electronAPI.exportFormPdf === 'function') {
+          const res = await window.electronAPI.exportFormPdf(wrapped, { saveToDocuments: true });
+          if (res && res.ok) {
+            showNotification('Export saved', 'Saved PDF to: ' + res.pdfPath, 'success');
+            return;
+          }
+          throw new Error(res && res.error ? res.error : 'exportFormPdf failed');
+        }
+
+        throw new Error('No exporter available (exportFormPdf not found)');
+      } catch (e) {
+        console.error('export failed', e);
+        showNotification('Export failed', String(e), 'error');
+      } finally {
+        try { exportBtn.disabled = false; exportBtn.innerText = 'Export PDF'; } catch (e) {}
+        try { hideSpinner(); } catch (e) {}
+      }
     });
 
   } catch (e) { console.warn('openEntryModal failed', e); showNotification('Open failed', String(e), 'error'); }
@@ -1148,256 +1141,26 @@ function renderLocalHistory(list) {
           // Export logic scoped to this modal (captures `mount`)
           exportBtn.addEventListener('click', async () => {
             try {
-              // ensure no on-screen transforms are applied (prevent visual shrinking)
-              const clearTransforms = (el) => {
-                try {
-                  if (!el || !el.style) return;
-                  el.style.transform = '';
-                  el.style.transformOrigin = '';
-                } catch (e) {}
-                try { Array.from(el.children || []).forEach(child => clearTransforms(child)); } catch (e) {}
-              };
-              try { clearTransforms(modal); } catch (e) {}
-
               exportBtn.disabled = true; exportBtn.innerText = 'Preparing...';
-              if (typeof window.html2canvas !== 'function') {
-                await new Promise((resolve, reject) => {
-                  const s = document.createElement('script');
-                  s.src = 'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js';
-                  s.onload = () => resolve();
-                  s.onerror = (e) => reject(e);
-                  document.head.appendChild(s);
-                });
-              }
-
-              // Wait briefly for layout to stabilise
               try { showSpinner('Preparing export...'); } catch (e) {}
-              await new Promise(r => setTimeout(r, 260));
 
-              const wrapper = mount;
-              if (!wrapper) throw new Error('Preview mount not found');
-
-              exportBtn.innerText = 'Exporting...';
-
-              // Ensure the app window is maximized for a full-size capture.
-              try {
-                if (window && window.electronAPI && window.electronAPI.window && typeof window.electronAPI.window.isMaximized === 'function') {
-                  const maximizedRes = await window.electronAPI.window.isMaximized();
-                  if (!(maximizedRes && maximizedRes.maximized)) {
-                    try { await window.electronAPI.window.toggleMaximize(); } catch (e) {}
-                    // allow layout/renderer to stabilise after maximize
-                    await new Promise(r => setTimeout(r, 450));
-                  }
+              if (window.electronAPI && typeof window.electronAPI.exportFormPdf === 'function') {
+                const res = await window.electronAPI.exportFormPdf(wrapped, { saveToDocuments: true });
+                if (res && res.ok) {
+                  showNotification('Export saved', 'Saved PDF to: ' + res.pdfPath, 'success');
+                  return;
                 }
-              } catch (e) { /* ignore maximize errors */ }
-
-                // Before capture, temporarily re-render the RN presentational with
-                // the `__exportingWide` flag so components that respond to that
-                // flag will compress to export-friendly widths. We will restore
-                // the original render after capture.
-                let didReRenderForExport = false;
-                try {
-                  const exportWrapped = (wrapped && typeof wrapped === 'object') ? JSON.parse(JSON.stringify(wrapped)) : wrapped;
-                  try { if (exportWrapped) exportWrapped.__exportingWide = true; } catch (e) {}
-                  try { if (exportWrapped && exportWrapped.payload) exportWrapped.payload.__exportingWide = true; } catch (e) {}
-                  if (window.rnRenderer && typeof window.rnRenderer.renderFormInto === 'function') {
-                    try {
-                      window.rnRenderer.renderFormInto(mount, exportWrapped);
-                      didReRenderForExport = true;
-                      // allow RN render/layout to stabilise
-                      await new Promise(r => setTimeout(r, 180));
-                    } catch (e) { console.warn('Re-render for exportingWide failed', e); }
-                  }
-                } catch (e) { console.warn('prepare exportingWrapped failed', e); }
-
-                // Measure the natural size of the rendered content (include scrollable width)
-              const naturalW = wrapper.scrollWidth || wrapper.offsetWidth || 1200;
-              const naturalH = wrapper.scrollHeight || wrapper.offsetHeight || 1600;
-
-              // Temporarily widen the on-screen modal so nested scrollable tables
-              // can expand visually while we capture the entire modal. Also
-              // expand its height so off-screen scrollable content is included.
-              // Restore the previous modal sizing and controls after capture.
-              const prevModalWidth = modal.style.width || '';
-              const prevModalMaxWidth = modal.style.maxWidth || '';
-              const prevModalMargin = modal.style.margin || '';
-              const prevModalHeight = modal.style.height || '';
-              const prevModalOverflow = modal.style.overflow || '';
-              try { modal.style.width = (window.innerWidth - 48) + 'px'; modal.style.maxWidth = 'none'; modal.style.margin = '0 24px'; } catch (e) {}
-              try { modal.style.height = naturalH + 'px'; modal.style.overflow = 'visible'; wrapper.style.overflow = 'visible'; } catch (e) {}
-
-              // hide the modal controls while we capture so buttons don't appear
-              try { exportBtn.style.visibility = 'hidden'; if (typeof closeBtn !== 'undefined') closeBtn.style.visibility = 'hidden'; } catch (e) {}
-
-              // Compute capture scale: boost above devicePixelRatio to improve text
-              // crispness in canvas renders. Limit to 4x to avoid extreme memory use.
-              const devicePR = window.devicePixelRatio || 1;
-              const captureScale = Math.min(4, Math.max(1, Math.round(devicePR * 4)));
-
-              // If content is wider than the visible modal (or window), capture
-              // an offscreen clone at the natural content width so wide tables
-              // are not clipped. Otherwise capture the visible modal and fall
-              // back to an offscreen clone if the modal capture missed content.
-              let canvas = null;
-              const desiredModalW = Math.max(0, (window.innerWidth - 48));
-              if (naturalW > desiredModalW) {
-                // wide content: capture an offscreen clone sized to naturalW/naturalH
-                const clone = wrapper.cloneNode(true);
-                clone.style.width = naturalW + 'px';
-                clone.style.height = naturalH + 'px';
-                clone.style.boxSizing = 'border-box';
-                clone.style.overflow = 'visible';
-
-                const off = document.createElement('div');
-                off.style.position = 'fixed';
-                off.style.left = '-10000px';
-                off.style.top = '0';
-                off.style.width = naturalW + 'px';
-                off.style.height = naturalH + 'px';
-                off.style.overflow = 'visible';
-                off.style.pointerEvents = 'none';
-                off.appendChild(clone);
-                document.body.appendChild(off);
-                try {
-                  canvas = await window.html2canvas(clone, { scale: captureScale, useCORS: true, logging: false });
-                } catch (e) {
-                  console.warn('Wide offscreen clone capture failed, falling back to modal capture', e);
-                }
-                try { document.body.removeChild(off); } catch (e) {}
+                throw new Error(res && res.error ? res.error : 'exportFormPdf failed');
               }
 
-              if (!canvas) {
-                // Capture modal (visible UI)
-                try {
-                  canvas = await window.html2canvas(modal, { scale: captureScale, useCORS: true, logging: false });
-                } catch (e) {
-                  console.warn('Modal capture failed, attempting clone capture', e);
-                  canvas = null;
-                }
-              }
-
-              // If the modal capture missed content (canvas shorter than expected)
-              // fall back to capturing an offscreen clone sized to the natural
-              // content dimensions.
-              try {
-                const expectedH = Math.round(naturalH * captureScale);
-                if ((!canvas || !canvas.height || (expectedH && canvas.height < expectedH - 8))) {
-                  const clone2 = wrapper.cloneNode(true);
-                  clone2.style.width = naturalW + 'px';
-                  clone2.style.height = naturalH + 'px';
-                  clone2.style.boxSizing = 'border-box';
-                  clone2.style.overflow = 'visible';
-
-                  const off2 = document.createElement('div');
-                  off2.style.position = 'fixed';
-                  off2.style.left = '-10000px';
-                  off2.style.top = '0';
-                  off2.style.width = naturalW + 'px';
-                  off2.style.height = naturalH + 'px';
-                  off2.style.overflow = 'visible';
-                  off2.style.pointerEvents = 'none';
-                  off2.appendChild(clone2);
-                  document.body.appendChild(off2);
-                  try {
-                    const c2 = await window.html2canvas(clone2, { scale: captureScale, useCORS: true, logging: false });
-                    if (c2 && (!canvas || c2.height > canvas.height)) canvas = c2;
-                  } catch (e) {
-                    console.warn('Fallback clone capture failed', e);
-                  }
-                  try { document.body.removeChild(off2); } catch (e) {}
-                }
-              } catch (e) {}
-
-              // restore modal size and controls
-              try { modal.style.width = prevModalWidth; modal.style.maxWidth = prevModalMaxWidth; modal.style.margin = prevModalMargin; modal.style.height = prevModalHeight; modal.style.overflow = prevModalOverflow; wrapper.style.overflow = ''; } catch (e) {}
-              try { exportBtn.style.visibility = ''; if (typeof closeBtn !== 'undefined') closeBtn.style.visibility = ''; } catch (e) {}
-
-              // Restore original RN render if we re-rendered for export
-              try {
-                if (didReRenderForExport && window.rnRenderer && typeof window.rnRenderer.renderFormInto === 'function') {
-                  try {
-                    window.rnRenderer.renderFormInto(mount, wrapped);
-                  } catch (e) { console.warn('Failed to restore original render after export', e); }
-                }
-              } catch (e) {}
-
-              const name = (entry && entry.name) || (wrapped && wrapped.payload && (wrapped.payload.title || wrapped.payload.name)) || `form-${Date.now()}`;
-
-              // If the captured canvas is wider than the intended export width,
-              // downscale it so it fits an A4 page width. This avoids horizontal
-              // clipping when printing. EXPORT_TARGET_WIDTH is in CSS pixels.
-              const EXPORT_TARGET_WIDTH = 900; // matches presentational export widths
-              try {
-                const maxW = Math.round(EXPORT_TARGET_WIDTH * captureScale);
-                if (canvas && canvas.width && canvas.width > maxW) {
-                  const scaled = document.createElement('canvas');
-                  const scaleFactor = maxW / canvas.width;
-                  scaled.width = maxW;
-                  scaled.height = Math.round(canvas.height * scaleFactor);
-                  const sctx = scaled.getContext('2d');
-                  sctx.fillStyle = '#ffffff'; sctx.fillRect(0,0,scaled.width,scaled.height);
-                  sctx.drawImage(canvas, 0, 0, canvas.width, canvas.height, 0, 0, scaled.width, scaled.height);
-                  canvas = scaled;
-                }
-              } catch (e) { console.warn('Downscale canvas failed', e); }
-
-              // If the captured canvas is taller than an A4 page at the captured
-              // width, slice it into A4-height pages so rows are not cut mid-row.
-              // A4 ratio: height/width = 297/210
-              const A4_RATIO = 297 / 210;
-              const pageH = Math.round(canvas.width * A4_RATIO);
-              if (canvas.height > pageH + 8) {
-                const pages = [];
-                // Add a small overlap (in canvas pixels) so rows don't get cut
-                const overlapCssPx = 32; // overlap in CSS px
-                const overlap = Math.round(overlapCssPx * captureScale);
-                const step = Math.max(1, pageH - overlap);
-                let y = 0;
-                while (y < canvas.height) {
-                  const remaining = canvas.height - y;
-                  let ph = Math.min(pageH, remaining);
-
-                  // If the last slice would be very short, merge it into previous
-                  const minLast = Math.round(pageH * 0.25);
-                  if (remaining <= pageH && remaining < minLast && pages.length > 0) {
-                    // Merge remainder into previous page
-                    const prevData = pages.pop();
-                    const prevImg = new Image();
-                    await new Promise((resolve) => { prevImg.onload = resolve; prevImg.src = prevData; });
-                    const merged = document.createElement('canvas');
-                    merged.width = canvas.width;
-                    merged.height = prevImg.height + remaining;
-                    const mctx = merged.getContext('2d');
-                    mctx.fillStyle = '#ffffff'; mctx.fillRect(0,0,merged.width,merged.height);
-                    mctx.drawImage(prevImg, 0, 0);
-                    mctx.drawImage(canvas, 0, y, canvas.width, remaining, 0, prevImg.height, canvas.width, remaining);
-                    pages.push(merged.toDataURL('image/png'));
-                    break;
-                  }
-
-                  const pageCanvas = document.createElement('canvas');
-                  pageCanvas.width = canvas.width;
-                  pageCanvas.height = ph;
-                  const ctx = pageCanvas.getContext('2d');
-                  ctx.fillStyle = '#ffffff'; ctx.fillRect(0,0,pageCanvas.width,pageCanvas.height);
-                  ctx.drawImage(canvas, 0, y, canvas.width, ph, 0, 0, canvas.width, ph);
-                  pages.push(pageCanvas.toDataURL('image/png'));
-                  y += step;
-                }
-
-                const resPages = await window.electronAPI.saveCapturePagesAsPdf({ pages, name, landscape: canvas.width > canvas.height });
-                if (resPages && resPages.ok) showNotification('Export saved', 'Saved PDF to: ' + resPages.pdfPath, 'success');
-                else showNotification('Export failed', (resPages && resPages.error) || 'unknown', 'error');
-              } else {
-                const dataUrl = canvas.toDataURL('image/png');
-                const res2 = await window.electronAPI.saveCapturePngAsPdf({ dataUrl, name, width: canvas.width, height: canvas.height, landscape: canvas.width > canvas.height });
-                if (res2 && res2.ok) showNotification('Export saved', 'Saved PDF to: ' + res2.pdfPath, 'success');
-                else showNotification('Export failed', (res2 && res2.error) || 'unknown', 'error');
-              }
+              throw new Error('No exporter available (exportFormPdf not found)');
             } catch (e) {
               console.error('export failed', e);
               showNotification('Export failed', String(e), 'error');
-            } finally { try { exportBtn.disabled = false; exportBtn.innerText = 'Export PDF'; } catch (e) {} try { hideSpinner(); } catch (e) {} }
+            } finally {
+              try { exportBtn.disabled = false; exportBtn.innerText = 'Export PDF'; } catch (e) {}
+              try { hideSpinner(); } catch (e) {}
+            }
           });
         } catch (e) { console.error(e); showNotification('Open failed', String(e), 'error'); }
       });
