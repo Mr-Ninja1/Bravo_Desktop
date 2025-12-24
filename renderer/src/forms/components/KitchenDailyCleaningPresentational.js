@@ -47,7 +47,7 @@ export default function KitchenDailyCleaningPresentational({ payload }) {
     if (typeof val !== 'string') return null;
     const s = val.trim(); if (!s) return null;
     if (s.startsWith('data:') || s.startsWith('http:') || s.startsWith('https:') || s.startsWith('file:') || s.startsWith('blob:')) return s;
-    const base64ish = /^[A-Za-z0-9+/=\s]+$/;
+    const base64ish = /^[A-Za-z0-9+/=\r\n]+$/;
     const compact = s.replace(/\s+/g, '');
     if (compact.length > 100 && base64ish.test(compact)) return `data:image/png;base64,${compact}`;
     return null;
@@ -56,7 +56,77 @@ export default function KitchenDailyCleaningPresentational({ payload }) {
   return (
     <ScrollView contentContainerStyle={styles.container} nestedScrollEnabled={true}>
       <View style={styles.card}>
-        <Text style={{ padding: 12 }}>Kitchen Daily Cleaning (preview)</Text>
+        <View style={styles.headerRow}>
+          <View style={styles.headerLeft}>
+            <View style={styles.logoWrap}>
+              {p.assets?.logoDataUri ? <Image source={{ uri: p.assets.logoDataUri }} style={styles.logo} /> : <Image source={require('../../assets/logo.jpeg')} style={styles.logo} />}
+            </View>
+            <Text style={styles.companyText}>{metadata.companyName || 'Bravo'}</Text>
+          </View>
+          <View style={styles.headerCenter}>
+            <Text style={styles.title}>{p.title || 'Food Contact Surface Cleaning and Sanitizing Log Sheet (Kitchen)'}</Text>
+          </View>
+        </View>
+
+  <ScrollView horizontal nestedScrollEnabled={true} showsHorizontalScrollIndicator={true} contentContainerStyle={{ minWidth: _tableWidth || 900 }}>
+          <View style={styles.table}>
+            {/* Header: main labels and per-slot labels */}
+            <View style={[styles.headerRowDark, { alignItems: 'stretch' }]}>
+              <View style={[styles.headerCell, { width: COL.EQUIPMENT || 200 }]}><Text style={styles.headerText}>EQUIPMENT</Text></View>
+              <View style={[styles.headerCell, { width: COL.PPM || 80 }]}><Text style={styles.headerText}>SANITIZER - PPM</Text></View>
+              <View style={[styles.headerCell, { width: perTimeWidth * timesList.length }] }>
+                <Text style={styles.headerText}>TIME INTERVAL</Text>
+                <View style={{ flexDirection: 'row' }}>
+                  {timesList.map((t, i) => (
+                    <View key={i} style={[styles.timeHeaderCell, { width: perTimeWidth }]}><Text style={styles.timeHeaderText}>{t}</Text></View>
+                  ))}
+                </View>
+              </View>
+              <View style={[styles.headerCell, { width: COL.STAFF_NAME || 120 }]}><Text style={styles.headerText}>STAFF NAME</Text></View>
+              <View style={[styles.headerCell, { width: COL.SIGNATURE || 120 }]}><Text style={styles.headerText}>STAFF SIGN</Text></View>
+              <View style={[styles.headerCell, { width: COL.SLIP_NAME || 140 }]}><Text style={styles.headerText}>SUP NAME</Text></View>
+              <View style={[styles.headerCell, { width: COL.SUP_SIGN || 140 }]}><Text style={styles.headerText}>SUP SIGN</Text></View>
+            </View>
+
+            {formData.map((row, idx) => (
+              <View key={idx} style={styles.row}>
+                <View style={[styles.cell, { width: COL.EQUIPMENT || 200 }]}><Text style={styles.areaText}>{row.name || ''}</Text></View>
+                <View style={[styles.cell, { width: COL.PPM || 80 }]}><Text>{row.ppm || ''}</Text></View>
+                <View style={{ flexDirection: 'row', width: perTimeWidth * timesList.length }}>
+                  {timesList.map((t, ti) => (
+                    <View key={ti} style={[styles.timeBox, { width: perTimeWidth }]}>
+                      <Text style={styles.checkMark}>{row.times && row.times[t] ? '✓' : ''}</Text>
+                    </View>
+                  ))}
+                </View>
+                <View style={[styles.cell, { width: COL.STAFF_NAME || 120 }]}><Text>{row.staffName || ''}</Text></View>
+                <View style={[styles.cell, { width: COL.SIGNATURE || 120 }]}>
+                  {row.staffSign ? (
+                    <SignatureThumb uri={String(row.staffSign).startsWith('data:') ? row.staffSign : `data:image/png;base64,${row.staffSign}`} width={(COL.SIGNATURE || 120) - 20} height={44} layers={6} spread={0.9} />
+                  ) : <Text>{''}</Text>}
+                </View>
+                <View style={[styles.cell, { width: COL.SLIP_NAME || 140 }]}><Text>{row.slipName || ''}</Text></View>
+                <View style={[styles.cell, { width: COL.SUP_SIGN || 140 }]}>
+                  {row.supSign ? (
+                    <SignatureThumb uri={String(row.supSign).startsWith('data:') ? row.supSign : `data:image/png;base64,${row.supSign}`} width={(COL.SUP_SIGN || 140) - 20} height={44} layers={6} spread={0.9} />
+                  ) : <Text>{''}</Text>}
+                </View>
+              </View>
+            ))}
+          </View>
+        </ScrollView>
+
+        {/* Footer: Verified by signature (show signature thumbnail if present, else text) */}
+        <View style={{ marginTop: 12, flexDirection: 'row', justifyContent: 'flex-start', alignItems: 'center' }}>
+          <View style={{ marginRight: 24 }}>
+            <Text style={{ fontWeight: '700' }}>Verified By:</Text>
+            {(() => {
+              const raw = p.verifiedSign || metadata.verifiedSign || metadata.verified_by || metadata.verifiedBy || metadata.verified || null;
+              const uri = resolveSignatureUri(raw);
+              return uri ? <SignatureThumb uri={uri} width={(COL.SIGNATURE || 120) + 60} height={56} layers={8} spread={1.0} /> : <Text style={{ marginTop: 6 }}>{metadata.verifiedBy || ''}</Text>;
+            })()}
+          </View>
+        </View>
       </View>
     </ScrollView>
   );

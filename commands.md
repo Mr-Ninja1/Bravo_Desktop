@@ -1,6 +1,1 @@
-# from workspace root
-cd Desktop
-npm run build   # if you use a build step for the renderer
-npm start
-cd Desktop
-npm run build-renderer
+node -e "const fs=require('fs');const dir='./src/exporters/html';console.log(fs.readdirSync(dir).filter(f=>f.includes('kitchen')||f.includes('Kitchen')||f.includes('foodcontact')||f.includes('kitchen_daily') ).join('\n'))"

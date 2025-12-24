@@ -178,37 +178,96 @@ ipcMain.handle('drive-local-history', async () => {
 // Generate HTML preview for known form types (run in main so we can require server-side generators)
 ipcMain.handle('generate-form-html', async (event, payloadWrapper) => {
   try {
-    const p = payloadWrapper && payloadWrapper.payload ? payloadWrapper.payload : payloadWrapper || {};
-    const type = (p.formType || p.title || p.name || '').toString().replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
-    // Try to find a matching exporter under src/exporters/html by filename
-    try {
-      const fs = require('fs');
-      const exportersDir = path.join(__dirname, 'src', 'exporters', 'html');
-      const files = fs.readdirSync(exportersDir).filter(f => f && f.toLowerCase().endsWith('.js'));
-      for (const f of files) {
-        try {
-          const base = f.replace(/^generate/i, '').replace(/html\.js$/i, '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
-          if (!base) continue;
-          if (type.indexOf(base) !== -1 || base.indexOf(type) !== -1) {
-            const modPath = path.join(exportersDir, f);
+      const p = payloadWrapper && payloadWrapper.payload ? payloadWrapper.payload : payloadWrapper || {};
+
+      // Build a set of candidate strings from multiple payload fields to improve matching
+      const candidates = [];
+      const pushNorm = (v) => {
+        if (!v) return;
+        try { const s = String(v).replace(/[^a-zA-Z0-9]/g, '').toLowerCase(); if (s) candidates.push(s); } catch (e) {}
+      };
+      pushNorm(p.title);
+      pushNorm(p.formType);
+      pushNorm(p.formTypeName);
+      pushNorm(p.name);
+      pushNorm(p.metadata && p.metadata.subject);
+      pushNorm(p.metadata && p.metadata.location);
+
+      // Add heuristic candidates for common keywords
+      const rawTitle = (p.title || p.formType || p.name || '').toString().toLowerCase();
+      if (rawTitle.includes('kitchen') && (rawTitle.includes('sanitiz') || rawTitle.includes('clean'))) candidates.push('kitchendailycleaning');
+      if (rawTitle.includes('food contact') || rawTitle.includes('foodcontact')) candidates.push('kitchendailycleaning');
+      // Food Handlers / Handwashing heuristics
+      if (rawTitle.includes('food handlers') || rawTitle.includes('foodhandlers') || rawTitle.includes('handwashing') || rawTitle.includes('hand wash')) {
+        candidates.push('foodhandlers');
+        candidates.push('foodhandlersdailyhandwashing');
+      }
+      // PPE / Personal Protective Equipment heuristics
+      if (rawTitle.includes('ppe') || rawTitle.includes('personal') || rawTitle.includes('protect')) {
+        candidates.push('ppe');
+        candidates.push('person alprotectiveequipment'.replace(/\s+/g,''));
+      }
+
+      // Try to find a matching exporter under src/exporters/html by filename using any candidate
+      try {
+        const fs = require('fs');
+        const exportersDir = path.join(__dirname, 'src', 'exporters', 'html');
+        const files = fs.readdirSync(exportersDir).filter(f => f && f.toLowerCase().endsWith('.js'));
+        // scoring function: prefer exact matches, then longer common substrings
+        const longestCommonSubstring = (a, b) => {
+          if (!a || !b) return 0;
+          const m = Array(a.length + 1).fill(null).map(() => Array(b.length + 1).fill(0));
+          let longest = 0;
+          for (let i = 0; i < a.length; i++) {
+            for (let j = 0; j < b.length; j++) {
+              if (a[i] === b[j]) {
+                m[i+1][j+1] = m[i][j] + 1;
+                if (m[i+1][j+1] > longest) longest = m[i+1][j+1];
+              }
+            }
+          }
+          return longest;
+        };
+
+        let best = { score: 0, file: null };
+        for (const f of files) {
+          try {
+            const base = f.replace(/^generate/i, '').replace(/html\.js$/i, '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+            if (!base) continue;
+            let score = 0;
+            for (const c of candidates) {
+              if (!c) continue;
+              if (c === base) {
+                score += 10000; // exact match wins
+              } else if (c.indexOf(base) !== -1 || base.indexOf(c) !== -1) {
+                score += 100 + Math.max(base.length, c.length);
+              } else {
+                score += longestCommonSubstring(base, c);
+              }
+            }
+            if (score > best.score) best = { score, file: f };
+          } catch (e) {
+            console.warn('generate-form-html: exporter scoring failed', f, e && e.message ? e.message : e);
+          }
+        }
+        if (best.file) {
+          try {
+            const modPath = path.join(exportersDir, best.file);
             try { delete require.cache[require.resolve(modPath)]; } catch (e) {}
             const gen = require(modPath);
-            // module may export default or module.exports
-            const fn = gen && (gen.default || gen) ;
+            const fn = gen && (gen.default || gen);
             if (typeof fn === 'function') {
               const html = fn(payloadWrapper);
               return { ok: true, html };
             }
+          } catch (e) {
+            console.warn('generate-form-html: exporter require failed', best.file, e && e.message ? e.message : e);
           }
-        } catch (e) {
-          // continue trying other exporters
-          console.warn('generate-form-html: exporter require failed', f, e.message);
         }
+      } catch (e) {
+        console.warn('generate-form-html: failed to scan exporters', e && e.message ? e.message : e);
       }
-    } catch (e) {
-      console.warn('generate-form-html: failed to scan exporters', e.message);
-    }
-    return { ok: false, error: 'No generator for form type' };
+      return { ok: false, error: 'No generator for form type' };
   } catch (e) { return { ok: false, error: String(e) }; }
 });
 
@@ -221,26 +280,73 @@ ipcMain.handle('export-form-pdf', async (event, payloadWrapper, opts = {}) => {
     const p = payloadWrapper && payloadWrapper.payload ? payloadWrapper.payload : payloadWrapper || {};
     const type = (p.formType || p.title || p.name || '').toString().replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
 
-    // find exporter
+    // find exporter using multiple payload fields and heuristics
     let html = null;
     try {
+      const candidates = [];
+      const pushNorm = (v) => { if (!v) return; try { const s = String(v).replace(/[^a-zA-Z0-9]/g, '').toLowerCase(); if (s) candidates.push(s); } catch (e) {} };
+      pushNorm(p.title); pushNorm(p.formType); pushNorm(p.formTypeName); pushNorm(p.name); pushNorm(p.metadata && p.metadata.subject); pushNorm(p.metadata && p.metadata.location);
+      const rawTitle = (p.title || p.formType || p.name || '').toString().toLowerCase();
+      if (rawTitle.includes('kitchen') && (rawTitle.includes('sanitiz') || rawTitle.includes('clean'))) candidates.push('kitchendailycleaning');
+      if (rawTitle.includes('food contact') || rawTitle.includes('foodcontact')) candidates.push('kitchendailycleaning');
+      // Food Handlers / Handwashing heuristics
+      if (rawTitle.includes('food handlers') || rawTitle.includes('foodhandlers') || rawTitle.includes('handwashing') || rawTitle.includes('hand wash')) {
+        candidates.push('foodhandlers');
+        candidates.push('foodhandlersdailyhandwashing');
+      }
+      // PPE / Personal Protective Equipment heuristics
+      if (rawTitle.includes('ppe') || rawTitle.includes('personal') || rawTitle.includes('protect')) {
+        candidates.push('ppe');
+        candidates.push('personalprotectiveequipment');
+      }
+
       const files = fs.readdirSync(exportersDir).filter(f => f && f.toLowerCase().endsWith('.js'));
+      // scoring-based selection (prefer exact match, then stronger overlaps)
+      const longestCommonSubstring = (a, b) => {
+        if (!a || !b) return 0;
+        const m = Array(a.length + 1).fill(null).map(() => Array(b.length + 1).fill(0));
+        let longest = 0;
+        for (let i = 0; i < a.length; i++) {
+          for (let j = 0; j < b.length; j++) {
+            if (a[i] === b[j]) {
+              m[i+1][j+1] = m[i][j] + 1;
+              if (m[i+1][j+1] > longest) longest = m[i+1][j+1];
+            }
+          }
+        }
+        return longest;
+      };
+
+      let best = { score: 0, file: null };
       for (const f of files) {
         try {
           const base = f.replace(/^generate/i, '').replace(/html\.js$/i, '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
           if (!base) continue;
-          if (type.indexOf(base) !== -1 || base.indexOf(type) !== -1) {
-            const modPath = path.join(exportersDir, f);
-            try { delete require.cache[require.resolve(modPath)]; } catch (e) {}
-            const gen = require(modPath);
-            const fn = gen && (gen.default || gen);
-            if (typeof fn === 'function') {
-              html = fn(payloadWrapper);
-              break;
+          let score = 0;
+          for (const c of candidates) {
+            if (!c) continue;
+            if (c === base) {
+              score += 10000;
+            } else if (c.indexOf(base) !== -1 || base.indexOf(c) !== -1) {
+              score += 100 + Math.max(base.length, c.length);
+            } else {
+              score += longestCommonSubstring(base, c);
             }
           }
+          if (score > best.score) best = { score, file: f };
         } catch (e) {
-          console.warn('export-form-pdf: exporter require failed', f, e && e.message ? e.message : e);
+          console.warn('export-form-pdf: exporter scoring failed', f, e && e.message ? e.message : e);
+        }
+      }
+      if (best.file) {
+        try {
+          const modPath = path.join(exportersDir, best.file);
+          try { delete require.cache[require.resolve(modPath)]; } catch (e) {}
+          const gen = require(modPath);
+          const fn = gen && (gen.default || gen);
+          if (typeof fn === 'function') html = fn(payloadWrapper);
+        } catch (e) {
+          console.warn('export-form-pdf: exporter require failed', best.file, e && e.message ? e.message : e);
         }
       }
     } catch (e) {
