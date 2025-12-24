@@ -193,6 +193,28 @@ ipcMain.handle('generate-form-html', async (event, payloadWrapper) => {
       pushNorm(p.metadata && p.metadata.subject);
       pushNorm(p.metadata && p.metadata.location);
 
+      // Explicit mappings for ambiguous/overlapping names -> exporter filename
+      const explicitMapping = {
+        'foh': 'generate_foh_frontofhouse_html.js',
+        'fohdailycleaningpresentational': 'generate_foh_frontofhouse_html.js',
+        'frontofhouse': 'generate_foh_frontofhouse_html.js',
+        'frontofhousecleaning': 'generate_foh_frontofhouse_html.js',
+        // Thawing temperature aliases
+        'thawingtemperature': 'generate_thawingtemperature_html.js',
+        'thawing': 'generate_thawingtemperature_html.js',
+        'thawingtemperaturelog': 'generate_thawingtemperature_html.js',
+        'thawingtemperaturepresentational': 'generate_thawingtemperature_html.js',
+        // other mappings
+        'productrejection': 'generate_productrejection_html.js',
+        'drygoodsreceiving': 'generate_drygoodsreceiving_html.js',
+        'toolboxtalkregister': 'generate_toolboxtalkregister_html.js'
+        ,
+        // Food handlers daily showering explicit mapping to prevent collision with other cleaning/checklist exporters
+        'foodhandlersdailyshowering': 'generate_foodhandlers_daily_showering_html.js',
+        'foodhandlersdailyshower': 'generate_foodhandlers_daily_showering_html.js',
+        'foodhandlersdailyshoweringpresentational': 'generate_foodhandlers_daily_showering_html.js'
+      };
+
       // Add heuristic candidates for common keywords
       const rawTitle = (p.title || p.formType || p.name || '').toString().toLowerCase();
       if (rawTitle.includes('kitchen') && (rawTitle.includes('sanitiz') || rawTitle.includes('clean'))) candidates.push('kitchendailycleaning');
@@ -213,6 +235,48 @@ ipcMain.handle('generate-form-html', async (event, payloadWrapper) => {
         const fs = require('fs');
         const exportersDir = path.join(__dirname, 'src', 'exporters', 'html');
         const files = fs.readdirSync(exportersDir).filter(f => f && f.toLowerCase().endsWith('.js'));
+        // Honor explicit exporter override in payload (metadata.exporter or exporter)
+        const overrideKey = (p.exporter || (p.metadata && p.metadata.exporter) || '').toString().trim();
+        if (overrideKey) {
+          try {
+            let mapped = overrideKey;
+            const norm = mapped.replace(/[^a-zA-Z0-9]/g,'').toLowerCase();
+            // if override is not a filename, try to find a matching file
+            if (!mapped.toLowerCase().endsWith('.js')) {
+              const found = files.find(f => f.toLowerCase().includes(norm) || f.replace(/[^a-zA-Z0-9]/g,'').toLowerCase() === norm);
+              if (found) mapped = found;
+            }
+            if (files.includes(mapped)) {
+              const modPath = path.join(exportersDir, mapped);
+              try { delete require.cache[require.resolve(modPath)]; } catch (e) {}
+              const gen = require(modPath);
+              const fn = gen && (gen.default || gen);
+              if (typeof fn === 'function') {
+                const html = fn(payloadWrapper);
+                console.log('generate-form-html: selected exporter via payload.override ->', mapped);
+                return { ok: true, html };
+              }
+            }
+          } catch (e) { /* ignore override failures and continue */ }
+        }
+        // Check explicit mapping first
+        for (const c of candidates) {
+          if (!c) continue;
+          const mapped = explicitMapping[c];
+          if (mapped && files.includes(mapped)) {
+            try {
+              const modPath = path.join(exportersDir, mapped);
+              try { delete require.cache[require.resolve(modPath)]; } catch (e) {}
+              const gen = require(modPath);
+              const fn = gen && (gen.default || gen);
+              if (typeof fn === 'function') {
+                const html = fn(payloadWrapper);
+                console.log('generate-form-html: selected exporter via explicitMapping ->', mapped);
+                return { ok: true, html };
+              }
+            } catch (e) { /* ignore and fallthrough to scoring */ }
+          }
+        }
         // scoring function: prefer exact matches, then longer common substrings
         const longestCommonSubstring = (a, b) => {
           if (!a || !b) return 0;
@@ -301,6 +365,66 @@ ipcMain.handle('export-form-pdf', async (event, payloadWrapper, opts = {}) => {
       }
 
       const files = fs.readdirSync(exportersDir).filter(f => f && f.toLowerCase().endsWith('.js'));
+      // Explicit mapping for common ambiguous names (prevents collisions)
+      const explicitMapping = {
+        'foh': 'generate_foh_frontofhouse_html.js',
+        'fohdailycleaningpresentational': 'generate_foh_frontofhouse_html.js',
+        'frontofhouse': 'generate_foh_frontofhouse_html.js',
+        'frontofhousecleaning': 'generate_foh_frontofhouse_html.js',
+        // Thawing temperature aliases
+        'thawingtemperature': 'generate_thawingtemperature_html.js',
+        'thawing': 'generate_thawingtemperature_html.js',
+        'thawingtemperaturelog': 'generate_thawingtemperature_html.js',
+        'thawingtemperaturepresentational': 'generate_thawingtemperature_html.js',
+        // other mappings
+        'productrejection': 'generate_productrejection_html.js',
+        'toolboxtalkregister': 'generate_toolboxtalkregister_html.js',
+        // Food handlers daily showering explicit mapping
+        'foodhandlersdailyshowering': 'generate_foodhandlers_daily_showering_html.js',
+        'foodhandlersdailyshower': 'generate_foodhandlers_daily_showering_html.js',
+        'foodhandlersdailyshoweringpresentational': 'generate_foodhandlers_daily_showering_html.js'
+      };
+      // Honor explicit exporter override in payload (metadata.exporter or exporter)
+      const overrideKey = (p.exporter || (p.metadata && p.metadata.exporter) || '').toString().trim();
+      if (overrideKey) {
+        try {
+          let mapped = overrideKey;
+          const norm = mapped.replace(/[^a-zA-Z0-9]/g,'').toLowerCase();
+          if (!mapped.toLowerCase().endsWith('.js')) {
+            const found = files.find(f => f.toLowerCase().includes(norm) || f.replace(/[^a-zA-Z0-9]/g,'').toLowerCase() === norm);
+            if (found) mapped = found;
+          }
+          if (files.includes(mapped)) {
+            try { delete require.cache[require.resolve(path.join(exportersDir, mapped))]; } catch (e) {}
+            const gen = require(path.join(exportersDir, mapped));
+            const fn = gen && (gen.default || gen);
+            if (typeof fn === 'function') {
+              html = fn(payloadWrapper);
+              console.log('export-form-pdf: selected exporter via payload.override ->', mapped);
+            }
+          }
+        } catch (e) { /* ignore and continue to explicitMapping */ }
+      }
+
+      // If any candidate maps explicitly, try that exporter first
+      for (const c of candidates) {
+        if (!c) continue;
+        const mapped = explicitMapping[c];
+        if (mapped && files.includes(mapped)) {
+          try {
+            const modPath = path.join(exportersDir, mapped);
+            try { delete require.cache[require.resolve(modPath)]; } catch (e) {}
+            const gen = require(modPath);
+            const fn = gen && (gen.default || gen);
+            if (typeof fn === 'function') {
+              html = fn(payloadWrapper);
+              console.log('export-form-pdf: selected exporter via explicitMapping ->', mapped);
+            }
+          } catch (e) { /* ignore and fallback to scoring */ }
+        }
+        if (html) break;
+      }
+
       // scoring-based selection (prefer exact match, then stronger overlaps)
       const longestCommonSubstring = (a, b) => {
         if (!a || !b) return 0;

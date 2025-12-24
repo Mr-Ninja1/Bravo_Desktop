@@ -32,72 +32,111 @@ module.exports = function generate(payloadWrapper) {
   const DAYS_OF_WEEK = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
   let logo = (p.assets && (p.assets.logoDataUri || p.assets.logo)) ? (p.assets.logoDataUri || p.assets.logo) : (p.logo || p.logoDataUri || metadata.logoUrl || metadata.companyLogo || metadata.logo || null);
-  if (!logo) {
-    try {
-      const fs = require('fs');
-      const path = require('path');
-      const possible = ['logo.png','logo.jpg','logo.jpeg','logo.webp'];
-      for (const name of possible) {
-        const pth = path.join(process.cwd(), 'assets', name);
-        if (fs.existsSync(pth)) {
-          const buf = fs.readFileSync(pth);
-          const ext = path.extname(name).toLowerCase().replace('.', '');
-          const mime = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : (ext === 'png' ? 'image/png' : (ext === 'webp' ? 'image/webp' : 'application/octet-stream'));
-          logo = `data:${mime};base64,${buf.toString('base64')}`;
-          break;
-        }
-      }
-    } catch (e) {}
-  }
 
-  const sigHtml = (v, h = 40) => { const uri = resolveSignatureUri(v); if (uri) return `<img src="${uri}" style="max-height:${h}px; width:auto; object-fit:contain; display:block;"/>`; return `<div style="font-size:9px;color:#94a3b8">${escapeHtml(v||'')}</div>`; };
+  const sigHtml = (v, h = 40) => { 
+    const uri = resolveSignatureUri(v); 
+    if (uri) return `<img src="${uri}" style="max-height:${h}px; width:auto; object-fit:contain; display:block;"/>`; 
+    return `<div style="font-size:9px;color:#94a3b8;border-bottom:1px solid #eee;width:120px;height:20px;margin-top:5px"></div>`; 
+  };
 
-  // default column widths (pixels)
-  const COL = { AREA: 300, FREQ: 150, DAY: 120 };
-  const TABLE_WIDTH = (p._tableWidth || (COL.AREA + COL.FREQ + (DAYS_OF_WEEK.length * COL.DAY)));
-  const exportingWide = !!p.exportingWide;
-  const A4_WIDTH = 794;
-  let scale = 1; if (exportingWide && TABLE_WIDTH > A4_WIDTH) scale = A4_WIDTH / TABLE_WIDTH;
-  const adj = { AREA: Math.round(COL.AREA * scale), FREQ: Math.round(COL.FREQ * scale), DAY: Math.round(COL.DAY * scale), TABLE: Math.round(TABLE_WIDTH * scale) };
+  // Professional A4 Landscape Calibration (approx 1060px total)
+  const COL = {
+    AREA: 220,
+    FREQ: 100,
+    DAY_TOTAL: 105, // 105 * 7 = 735
+    SUB_CHECK: 30,
+    SUB_CLEAN: 75 
+  };
+  const TOTAL_WIDTH = COL.AREA + COL.FREQ + (DAYS_OF_WEEK.length * COL.DAY_TOTAL);
 
-  const rowsHtml = (formData.length ? formData : Array.from({length:10}).map(()=>({})) ).map((item,i)=>{
+  const rowsHtml = (formData.length ? formData : Array.from({length:12}).map(()=>({})) ).map((item)=>{
     const dayCells = DAYS_OF_WEEK.map(d=>{
       const obj = item.days && item.days[d] ? item.days[d] : {};
-      return `<div class="day" style="width:${adj.DAY}px; display:flex; flex-direction:column; align-items:center; padding:6px; border-right:1px solid #333"><div style="height:20px">${obj.checked? '✓' : ''}</div><div style="font-size:10px; margin-top:6px">${escapeHtml(obj.cleanedBy||'')}</div></div>`;
+      return `
+        <div style="width:${COL.DAY_TOTAL}px; display:flex; border-right:1px solid #000; align-items:stretch">
+          <div style="width:${COL.SUB_CHECK}px; display:flex; align-items:center; justify-content:center; border-right:1px solid #ddd; font-weight:bold; font-size:12px">
+            ${obj.checked ? '✓' : ''}
+          </div>
+          <div style="width:${COL.SUB_CLEAN}px; font-size:9px; padding:2px; display:flex; align-items:center; justify-content:center; text-align:center; overflow:hidden; line-height:1">
+            ${escapeHtml(obj.cleanedBy || '')}
+          </div>
+        </div>`;
     }).join('');
-    return `<div class="row" style="display:flex; border-bottom:1px solid #ccc; min-height:44px">`+
-      `<div class="cell" style="width:${adj.AREA}px; padding:6px; text-align:left; font-weight:600">${escapeHtml(item.name||'')}</div>`+
-      `<div class="cell" style="width:${adj.FREQ}px; padding:6px">${escapeHtml(item.frequency||'')}</div>`+
-      `${dayCells}`+
-    `</div>`;
+
+    return `
+      <div style="display:flex; border-bottom:1px solid #000; min-height:36px; align-items:stretch; background:#fff">
+        <div style="width:${COL.AREA}px; padding:6px; border-right:1px solid #000; display:flex; align-items:center; font-weight:600; font-size:10px">${escapeHtml(item.name || '')}</div>
+        <div style="width:${COL.FREQ}px; padding:6px; border-right:1px solid #000; display:flex; align-items:center; justify-content:center; text-align:center; font-size:9px">${escapeHtml(item.frequency || '')}</div>
+        ${dayCells}
+      </div>`;
   }).join('\n');
 
   return `<!doctype html><html><head><meta charset="utf-8"><style>
-    @page{size:A4 landscape; margin:6mm}
-    body{font-family:Arial,Helvetica,sans-serif;margin:0;padding:8px;color:#111;font-size:10px}
-    .header{display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid #185a9d;padding-bottom:6px;margin-bottom:8px}
-    .logo{height:40px}
-    .company{font-weight:800;color:#185a9d}
-    .title{text-align:center;font-weight:800;margin:10px 0}
-    .table{border:1px solid #333}
-    .thead{display:flex;background:#f3f4f6;border-bottom:2px solid #333}
-    .hcell{padding:8px;border-right:1px solid #333;display:flex;align-items:center;justify-content:center;font-weight:800}
-    .row{display:flex}
-    .cell{padding:6px;border-right:1px solid #ddd;display:flex;align-items:center;justify-content:center}
+    @page{size:A4 landscape; margin:8mm}
+    *{box-sizing: border-box;}
+    body{font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin:0; padding:0; color:#111}
+    .container{width:${TOTAL_WIDTH}px; margin:0 auto; padding:10px}
+    .header{display:flex; align-items:center; justify-content:space-between; border-bottom:3px solid #185a9d; padding-bottom:10px; margin-bottom:10px}
+    .logo{height:50px; object-fit:contain}
+    .title{text-align:center; font-weight:900; font-size:18px; color:#185a9d; margin:15px 0; text-transform:uppercase; letter-spacing:1px}
+    .table{border:2px solid #000; width:100%; background:#000}
+    .thead{background:#f3f4f6; color:#000}
+    .h-top{display:flex; align-items:stretch}
+    .hcell{display:flex; align-items:center; justify-content:center; font-weight:800; text-align:center; text-transform:uppercase; font-size:10px}
+    .footer{margin-top:20px; display:flex; gap:20px}
+    .sig-box{flex:1; border:1px solid #333; padding:10px; background:#f9fafb}
   </style></head><body>
-    <div class="header"><div style="display:flex;align-items:center;gap:10px">${logo?`<img class="logo" src="${logo}"/>`:''}<div class="company">${escapeHtml(metadata.companyName||'Bravo')}</div></div><div style="font-weight:700">Week: ${escapeHtml(metadata.week||'')}</div></div>
-    <div class="title">BAKERY AREA CLEANING CHECKLIST</div>
-    <div class="table" style="width:${adj.TABLE}px">
-      <div class="thead">
-        <div class="hcell" style="width:${adj.AREA}px">Area to be cleaned</div>
-        <div class="hcell" style="width:${adj.FREQ}px">Frequency</div>
-        ${DAYS_OF_WEEK.map(d=>`<div class="hcell" style="width:${adj.DAY}px">${d.toUpperCase()}</div>`).join('')}
+    <div class="container">
+      <div class="header">
+        <div style="display:flex; align-items:center; gap:15px">
+          ${logo ? `<img class="logo" src="${logo}"/>` : ''}
+          <div>
+            <div style="font-weight:900; font-size:18px; color:#185a9d">${escapeHtml(metadata.companyName || 'BRAVO')}</div>
+            <div style="font-size:11px; font-weight:600; color:#666">FOOD SAFETY MANAGEMENT SYSTEM</div>
+          </div>
+        </div>
+        <div style="text-align:right; line-height:1.5">
+          <div style="font-weight:800; font-size:12px">LOCATION: <span style="font-weight:400">${escapeHtml(metadata.location || 'N/A')}</span></div>
+          <div style="font-weight:800; font-size:12px">WEEK NO: <span style="font-weight:400">${escapeHtml(metadata.week || '---')}</span></div>
+        </div>
       </div>
-      ${rowsHtml}
-    </div>
-    <div style="margin-top:12px; display:flex; gap:12px">
-      <div style="flex:1; border:1px solid #cbd5e1; padding:8px"><div style="font-weight:800;color:#185a9d">Verified By:</div>${sigHtml(p.verification?.hseqManagerSign || p.verification?.hseqManager || '')}</div>
-      <div style="flex:1; border:1px solid #cbd5e1; padding:8px"><div style="font-weight:800;color:#185a9d">Complex Manager:</div>${sigHtml(p.verification?.complexManagerSign || p.verification?.complexManager || '')}</div>
+      
+      <div class="title">Bakery & Confectionery Area Cleaning Checklist</div>
+      
+      <div class="table">
+        <div class="thead">
+          <div class="h-top">
+            <div class="hcell" style="width:${COL.AREA}px; border-right:1px solid #000; min-height:45px; background:#e5e7eb">Area to be cleaned</div>
+            <div class="hcell" style="width:${COL.FREQ}px; border-right:1px solid #000; background:#e5e7eb">Frequency</div>
+            ${DAYS_OF_WEEK.map(d => `
+              <div style="width:${COL.DAY_TOTAL}px; border-right:1px solid #000; display:flex; flex-direction:column">
+                <div class="hcell" style="flex:1; border-bottom:1px solid #000; background:#d1d5db; padding:4px">${d}</div>
+                <div style="display:flex; font-size:8px; height:20px">
+                  <div style="width:${COL.SUB_CHECK}px; border-right:1px solid #000; display:flex; align-items:center; justify-content:center">✓</div>
+                  <div style="flex:1; display:flex; align-items:center; justify-content:center">CLEANED BY</div>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+        <div style="background:#fff">
+          ${rowsHtml}
+        </div>
+      </div>
+
+      <div class="footer">
+        <div class="sig-box">
+          <div style="font-weight:800; color:#185a9d; margin-bottom:5px; font-size:11px">VERIFIED BY (HSEQ):</div>
+          ${sigHtml(p.verification?.hseqManagerSign || p.verification?.hseqManager)}
+        </div>
+        <div class="sig-box">
+          <div style="font-weight:800; color:#185a9d; margin-bottom:5px; font-size:11px">COMPLEX MANAGER:</div>
+          ${sigHtml(p.verification?.complexManagerSign || p.verification?.complexManager)}
+        </div>
+        <div class="sig-box" style="flex:0.5; background:none; border:none; display:flex; align-items:flex-end; font-size:9px; font-style:italic; color:#666">
+          Records must be kept for 3 years.
+        </div>
+      </div>
     </div>
   </body></html>`;
 };

@@ -1,5 +1,7 @@
-const escapeHtml = (s) => String(s === null || s === undefined ? '' : s)
-  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const fs = require('fs');
+const path = require('path');
+
+const escapeHtml = (s) => String(s === null || s === undefined ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 const normalizeIncoming = (incoming) => {
   if (!incoming) return {};
@@ -12,145 +14,169 @@ const normalizeIncoming = (incoming) => {
 
 const resolveSignatureUri = (val) => {
   if (!val) return null;
-  if (typeof val === 'object') {
-    if (val.uri && typeof val.uri === 'string') return val.uri.trim();
-    if (val.data && typeof val.data === 'string') return `data:image/png;base64,${val.data.replace(/\s+/g, '')}`;
-    return null;
-  }
-  if (typeof val !== 'string') return null;
-  const s = val.trim(); if (!s) return null;
-  if (s.startsWith('data:') || s.startsWith('http')) return s;
+  const s = String(val || '');
+  if (s.startsWith('data:')) return s;
   const compact = s.replace(/\s+/g, '');
-  if (compact.length > 100 && /^[A-Za-z0-9+/=]+$/.test(compact)) return `data:image/png;base64,${compact}`;
+  if (compact.length > 100) return `data:image/png;base64,${compact}`;
+  return null;
+};
+
+const renderSig = (v, w = 40, h = 25) => {
+  const uri = resolveSignatureUri(v);
+  if (!uri) return '';
+  return `<img src="${uri}" style="max-width:${w}px; max-height:${h}px; width:auto; display:block; margin:0 auto; object-fit:contain; mix-blend-mode: multiply;"/>`;
+};
+
+const getLogoDataUri = (p) => {
+  if (!p) return null;
+  if (p.assets && p.assets.logoDataUri) return p.assets.logoDataUri;
+  // Look for logo in local assets
+  const candidates = [
+    path.join(process.cwd(), 'renderer', 'assets', 'logo.jpeg'),
+    path.join(process.cwd(), 'assets', 'logo.jpeg'),
+    path.join(process.cwd(), 'assets', 'logo.png')
+  ];
+  for (const c of candidates) {
+    try {
+      if (fs.existsSync(c)) {
+        const b = fs.readFileSync(c);
+        const mime = path.extname(c).toLowerCase() === '.png' ? 'image/png' : 'image/jpeg';
+        return `data:${mime};base64,${b.toString('base64')}`;
+      }
+    } catch (e) {}
+  }
   return null;
 };
 
 module.exports = function generate(payloadWrapper) {
   const p = normalizeIncoming(payloadWrapper);
   const metadata = p.metadata || {};
-  
-  const title = p.title || metadata.title || 'Food Handlers Daily Handwashing Tracking Log Sheet';
-  const date = p.date || metadata.date || '';
-  const location = p.location || metadata.location || '';
-  const shift = p.shift || metadata.shift || '';
+
+  const week = p.week || metadata.week || '';
+  const month = p.month || metadata.month || '';
+  const year = p.year || metadata.year || '';
+  const compiledBy = p.compiledBy || metadata.compiledBy || '';
+  const approvedBy = p.approvedBy || metadata.approvedBy || '';
   const verifiedBy = p.verifiedBy || metadata.verifiedBy || '';
-  const timeSlots = Array.isArray(p.timeSlots) ? p.timeSlots : (metadata.timeSlots || []);
-  const handlers = Array.isArray(p.handlers) ? p.handlers : (p.formData || []);
+  
+  // Resolve Logo
+  const logoData = getLogoDataUri(p);
 
-  // Branding & Logo Logic
-  let logo = (p.assets && (p.assets.logoDataUri || p.assets.logo)) ? (p.assets.logoDataUri || p.assets.logo) : (p.logo || p.logoDataUri || metadata.logoUrl || metadata.companyLogo || metadata.logo || null);
-  if (!logo) {
-    try {
-      const fs = require('fs');
-      const explicit = 'C:\\Users\\sikal\\Desktop\\Bravo_Desktop\\assets\\logo.jpeg';
-      if (fs.existsSync(explicit)) {
-        const data = fs.readFileSync(explicit);
-        logo = `data:image/jpeg;base64,${data.toString('base64')}`;
-      }
-    } catch (e) {}
-  }
+  const COL = { NAME: 140, JOB: 110, TIME: 44, SIGN: 42, SUP: 70 };
+  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-  const sigHtml = (v, h = 32) => {
-    const uri = resolveSignatureUri(v);
-    if (uri) return `<img src="${uri}" style="max-height:${h}px; width:auto; object-fit:contain; display:block; mix-blend-mode:multiply;"/>`;
-    return `<div style="font-size:8px; color:#94a3b8; font-style:italic;">${escapeHtml(v || '')}</div>`;
+  const buildHeaderTop = () => {
+    return dayNames.map(dn => 
+      `<th colspan="2" style="border:1px solid #000; background:#d1d5db; font-size:10px; padding:4px">${dn.toUpperCase()}</th>`
+    ).join('');
   };
 
-  const renderCheck = (row, time) => (row.checks && row.checks[time]) ? '☑' : '☐';
+  const buildHeaderSub = () => {
+    return dayNames.map(() => 
+      `<th style="width:${COL.TIME}px; font-size:8px; background:#f3f4f6">TIME</th><th style="width:${COL.SIGN}px; font-size:8px; background:#f3f4f6">SIGN</th>`
+    ).join('');
+  };
 
-  const rowsToRender = handlers.length ? handlers : Array.from({ length: 12 }).map((_, i) => ({ id: i + 1 }));
+  const entries = Array.isArray(p.logEntries) ? p.logEntries : (Array.isArray(p.formData) ? p.formData : []);
+  const rows = entries.length ? entries : Array.from({ length: 12 }).map(() => ({}));
 
-  const rowsHtml = rowsToRender.map((row, idx) => `
-    <tr class="tr">
-      <td class="td sn-cell">${escapeHtml(String(row.id || idx + 1))}</td>
-      <td class="td name-cell">${escapeHtml(row.fullName || row.name || '')}</td>
-      <td class="td">${escapeHtml(row.jobTitle || row.job || '')}</td>
-      ${timeSlots.map(t => `<td class="td check-cell">${renderCheck(row, t)}</td>`).join('')}
-      <td class="td">${sigHtml(row.staffSign)}</td>
-      <td class="td">${escapeHtml(row.supName || '')}</td>
-      <td class="td">${sigHtml(row.supSign)}</td>
-    </tr>`).join('\n');
+  const rowsHtml = rows.map((row) => {
+    const name = row.fullName || row.name || (Array.isArray(row) ? row[0] : '');
+    const job = row.jobTitle || row.job || (Array.isArray(row) ? row[1] : '');
+    const supVal = row.supervisorSign || (Array.isArray(row) ? row[16] : '');
+
+    let dailyCells = '';
+    for (let d = 0; d < 7; d++) {
+      let timeVal = '';
+      let signVal = '';
+      if (Array.isArray(row)) {
+        timeVal = row[2 + (d * 2)];
+        signVal = row[2 + (d * 2) + 1];
+      } else if (row.days && row.days[dayNames[d]]) {
+        timeVal = row.days[dayNames[d]].time;
+        signVal = row.days[dayNames[d]].sign;
+      }
+      dailyCells += `
+        <td style="text-align:center; font-size:9px; border:1px solid #000">${escapeHtml(timeVal || '')}</td>
+        <td style="text-align:center; border:1px solid #000">${renderSig(signVal, 38, 22)}</td>
+      `;
+    }
+
+    return `
+      <tr style="height:32px">
+        <td style="padding-left:5px; font-size:10px; font-weight:600; border:1px solid #000">${escapeHtml(name)}</td>
+        <td style="padding-left:5px; font-size:9px; border:1px solid #000">${escapeHtml(job)}</td>
+        ${dailyCells}
+        <td style="text-align:center; border:1px solid #000">${renderSig(supVal, 65, 22)}</td>
+      </tr>`;
+  }).join('');
 
   return `<!doctype html><html><head><meta charset="utf-8"><style>
-    @page { size: A4 landscape; margin: 8mm; }
-    body { font-family: 'Inter', Arial, sans-serif; font-size: 10px; color: #1e293b; margin: 0; padding: 0; background: #fff; }
-    
-    .headerSection { display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #185a9d; padding-bottom: 8px; margin-bottom: 12px; }
-    .branding { display: flex; align-items: center; gap: 12px; }
-    .logo { height: 48px; width: auto; object-fit: contain; }
-    .companyName { font-size: 18px; font-weight: 800; color: #185a9d; text-transform: uppercase; }
-    
-    .titleBlock { text-align: center; margin-bottom: 15px; }
-    .formTitle { font-size: 14px; font-weight: 900; color: #0f172a; text-transform: uppercase; letter-spacing: 0.5px; }
-    
-    .metaRow { display: flex; gap: 24px; background: #f8fafc; padding: 8px 12px; border-radius: 4px; border: 1px solid #e2e8f0; margin-bottom: 15px; }
-    .metaItem { font-weight: 700; color: #475569; }
-    .metaValue { font-weight: 400; color: #0f172a; margin-left: 4px; border-bottom: 1px solid #cbd5e1; min-width: 60px; display: inline-block; }
-
-    table { width: 100%; border-collapse: collapse; table-layout: fixed; border: 1.5px solid #334155; }
-    th, td { border: 1px solid #334155; padding: 6px; box-sizing: border-box; overflow: hidden; }
-    th { background: #f1f5f9; font-weight: 800; text-transform: uppercase; font-size: 8.5px; }
-    
-    /* Fattened Rows */
-    tr { min-height: 42px; }
-    .td { height: 42px; vertical-align: middle; text-align: center; }
-    
-    .sn-cell { width: 35px; }
-    .name-cell { text-align: left; padding-left: 8px; width: 140px; }
-    .check-cell { font-size: 16px; width: 45px; }
-    
-    .verifiedSection { display: flex; align-items: flex-end; gap: 40px; margin-top: 20px; }
-    .sigWrapper { border-left: 3px solid #185a9d; padding-left: 12px; }
-    .sigLabel { font-weight: 800; color: #185a9d; font-size: 9px; text-transform: uppercase; margin-bottom: 4px; }
+    @page{size:A4 landscape; margin:8mm}
+    *{box-sizing: border-box;}
+    body{font-family:'Inter', Arial, sans-serif; margin:0; padding:0; color:#111}
+    .container{width:1060px; margin:0 auto; padding:10px}
+    .headerRow{display:flex; justify-content:space-between; align-items:center; border-bottom:2.5px solid #000; padding-bottom:8px; margin-bottom:10px}
+    .logo{height:55px; width:auto; object-fit:contain}
+    .mainTitle{font-size:18px; font-weight:900; text-align:center; margin:10px 0; text-transform:uppercase; color:#185a9d}
+    .metaBar{display:flex; gap:20px; border:1px solid #000; background:#f9fafb; padding:8px; margin-bottom:10px; font-size:12px; font-weight:700}
+    table{width:100%; border-collapse:collapse; border:2px solid #000; table-layout:fixed}
+    th{border:1px solid #000; vertical-align:middle}
+    .footer{margin-top:15px; display:flex; gap:15px}
+    .sigBox{flex:1; border:1px solid #000; padding:8px; background:#fff; font-size:11px}
   </style></head><body>
 
-    <div class="headerSection">
-      <div class="branding">
-        ${logo ? `<img src="${logo}" class="logo"/>` : ''}
-        <div class="companyName">${escapeHtml(metadata.companyName || 'Bravo')}</div>
+  <div class="container">
+    <div class="headerRow">
+      <div style="display:flex; align-items:center; gap:15px">
+        ${logoData ? `<img src="${logoData}" class="logo"/>` : `<div style="width:100px; height:50px; background:#eee; display:flex; align-items:center; justify-content:center; font-size:9px; color:#999">No Logo Found</div>`}
+        <div>
+          <div style="font-weight:900; font-size:16px; color:#185a9d">BRAVO BRANDS LIMITED</div>
+          <div style="font-size:10px; font-weight:700; color:#43cea2">Food Safety Management System</div>
+        </div>
       </div>
-      <div class="sigWrapper" style="border:none;">
-         <span class="sigLabel">Form Status:</span> <span style="color:#059669; font-weight:700">Daily Log</span>
+      <div style="text-align:right; font-size:10px; font-weight:800">
+        <div>Doc ID: BBN-SHW-LOG-01</div>
+        <div>Page: 1 of 1</div>
       </div>
     </div>
 
-    <div class="titleBlock">
-      <div class="formTitle">${escapeHtml(title)}</div>
-    </div>
+    <div class="mainTitle">Food Handlers Daily Showering Log</div>
 
-    <div class="metaRow">
-      <div class="metaItem">DATE: <span class="metaValue">${escapeHtml(date)}</span></div>
-      <div class="metaItem">LOCATION: <span class="metaValue">${escapeHtml(location)}</span></div>
-      <div class="metaItem">SHIFT: <span class="metaValue">${escapeHtml(shift)}</span></div>
+    <div class="metaBar">
+      <div>Week No: <span style="font-weight:400">${escapeHtml(week)}</span></div>
+      <div>Month: <span style="font-weight:400">${escapeHtml(month)}</span></div>
+      <div>Year: <span style="font-weight:400">${escapeHtml(year)}</span></div>
     </div>
 
     <table>
       <thead>
         <tr>
-          <th style="width:35px">S/N</th>
-          <th style="width:140px">Full Name</th>
-          <th style="width:100px">Job Title</th>
-          ${timeSlots.map(t => `<th style="width:45px">${escapeHtml(t)}</th>`).join('')}
-          <th style="width:100px">Staff Sign</th>
-          <th style="width:100px">Sup Name</th>
-          <th style="width:100px">Sup Sign</th>
+          <th rowspan="2" style="width:${COL.NAME}px; background:#e5e7eb">Full Name</th>
+          <th rowspan="2" style="width:${COL.JOB}px; background:#e5e7eb">Job Title</th>
+          ${buildHeaderTop()}
+          <th rowspan="2" style="width:${COL.SUP}px; background:#e5e7eb; font-size:9px">Supervisor Sign</th>
         </tr>
+        <tr>${buildHeaderSub()}</tr>
       </thead>
-      <tbody>
-        ${rowsHtml}
-      </tbody>
+      <tbody>${rowsHtml}</tbody>
     </table>
 
-    <div class="verifiedSection">
-      <div class="sigWrapper">
-        <div class="sigLabel">Verified By:</div>
-        ${sigHtml(verifiedBy, 50)}
+    <div class="footer">
+      <div class="sigBox">
+        <strong>Compiled By:</strong> ${escapeHtml(compiledBy)}
+        <div style="margin-top:5px">${renderSig(metadata.compiledBySign || p.compiledBySign, 180, 30)}</div>
       </div>
-      <div class="sigWrapper">
-        <div class="sigLabel">Complex Manager:</div>
-        ${sigHtml(p.complexManagerSign || metadata.complexManagerSign, 50)}
+      <div class="sigBox">
+        <strong>Approved By:</strong> ${escapeHtml(approvedBy)}
+        <div style="margin-top:5px">${renderSig(metadata.approvedBySign || p.approvedBySign, 180, 30)}</div>
+      </div>
+      <div class="sigBox">
+        <strong>Verified By (HSEQ):</strong> ${escapeHtml(verifiedBy)}
+        <div style="margin-top:5px">${renderSig(metadata.verifiedBySign || p.verifiedBySign, 180, 30)}</div>
       </div>
     </div>
+  </div>
 
-  </body></html>`;
+</body></html>`;
 };

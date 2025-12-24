@@ -745,6 +745,20 @@ async function openEntryModal(entry) {
         try { showSpinner('Preparing export...'); } catch (e) {}
 
         if (window.electronAPI && typeof window.electronAPI.exportFormPdf === 'function') {
+          try {
+            // If exporter hint not present, attempt to set one from RN renderer debug info
+            try {
+              if (wrapped && wrapped.payload) {
+                wrapped.payload.metadata = wrapped.payload.metadata || {};
+                if (!wrapped.payload.metadata.exporter && window.__rnLastDebug && window.__rnLastDebug.payloadSummary) {
+                  const key = (window.__rnLastDebug.payloadSummary.typeKey || window.__rnLastDebug.resolvedKey || '').toString();
+                  if (key) {
+                    wrapped.payload.metadata.exporter = key.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+                  }
+                }
+              }
+            } catch (e) { /* ignore debug extraction failures */ }
+          } catch (e) {}
           const res = await window.electronAPI.exportFormPdf(wrapped, { saveToDocuments: true });
           if (res && res.ok) {
             showNotification('Export saved', 'Saved PDF to: ' + res.pdfPath, 'success');
