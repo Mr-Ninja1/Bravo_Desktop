@@ -31,6 +31,24 @@ module.exports = function generate(payloadWrapper) {
   const metadata = p.metadata || {};
   const rows = Array.isArray(p.formData) ? p.formData : (p.rows || []);
 
+  const data = p.formData || p.data || {};
+  const pick = (obj, keys) => { for (const k of keys) { if (!obj) continue; const v = obj[k]; if (v) return v; } return null; };
+  const subjectCandidates = [
+    // formData common
+    () => pick(data, ['subject','title','formTitle','name','formName']),
+    // top-level payload
+    () => pick(p, ['subject','title','formTitle','formName','_formName','_formTitle']),
+    // metadata
+    () => pick(metadata, ['subject','title','formTitle','formName','displayName','formName']),
+    // legacy
+    () => (p && p.form && (p.form.title || p.form.name)) || null
+  ];
+  let subject = null;
+  for (const fn of subjectCandidates) {
+    try { const v = fn(); if (v) { subject = v; break; } } catch (e) {}
+  }
+  if (!subject) subject = 'Underbar Chiller Temperature Log Sheet';
+
   // Standardize on 31 rows for a full monthly view
   const rowData = rows.length ? rows : Array.from({ length: 31 }).map((_, i) => ({ day: i + 1 }));
 
@@ -149,7 +167,7 @@ module.exports = function generate(payloadWrapper) {
       <div style="font-weight:700; font-size: 10px; color: #475569;">: ${escapeHtml(metadata.date || '—')}</div>
     </div>
 
-    <div class="title">Underbar Chiller Temperature Log Sheet</div>
+    <div class="title">${escapeHtml(subject)}</div>
 
     <div class="table">
       <div class="thead-group">
