@@ -261,6 +261,8 @@ if (disableSplash) {
 
 // Connect using Desktop OAuth via main process
 initFooter();
+// Ensure legacy year sidebar stays hidden — we render years in the center
+try { if (yearSidebar) yearSidebar.style.display = 'none'; } catch (e) {}
 
 connectBtn.addEventListener('click', async () => {
   connectBtn.disabled = true;
@@ -330,22 +332,32 @@ connectBtn.addEventListener('click', async () => {
 refreshBtn.addEventListener('click', loadDropboxFiles);
 
 async function loadDropboxFiles() {
-  yearSidebar.innerHTML = '<div class="placeholder">Loading...</div>';
+  // keep a central loading state while we fetch the remote index
+  const center = document.getElementById('rnPreview') || document.getElementById('center');
+  if (center) {
+    center.style.display = 'flex';
+    try { if (previewFrame) previewFrame.style.display = 'none'; } catch (e) {}
+    center.innerHTML = '<div class="placeholder">Loading Dropbox index…</div>';
+    try { document.body.classList.add('previewFull'); } catch (e) {}
+  }
+  yearSidebar && (yearSidebar.style.display = 'none');
   try {
     const res = await window.electronAPI.drive.listFilesRecursive('');
     if (!res || !res.ok) {
-      yearSidebar.innerHTML = '<div class="placeholder">Failed to load: ' + (res && res.error || '') + '</div>';
+      if (center) center.innerHTML = '<div class="placeholder">Failed to load: ' + (res && res.error || '') + '</div>';
       return;
     }
     const entries = res.entries || [];
+    // cache current remote entries for filtering by year on-demand
+    currentEntries = entries;
     if (!entries.length) {
-      yearSidebar.innerHTML = '<div class="placeholder">No files found in Dropbox.</div>';
+      if (center) center.innerHTML = '<div class="placeholder">No files found in Dropbox.</div>';
       return;
     }
     renderYearCards(entries);
   } catch (err) {
     console.error(err);
-    yearSidebar.innerHTML = '<div class="placeholder">Error loading files.</div>';
+    if (center) center.innerHTML = '<div class="placeholder">Error loading files.</div>';
   }
 }
 
@@ -378,68 +390,76 @@ function renderYearCards(entries) {
 
   const years = Object.keys(yearMap).sort((a, b) => Number(b) - Number(a));
   if (!years.length) {
-    yearSidebar.innerHTML = '<div id="noYearsPlaceholder" class="placeholder">No years found in Dropbox.</div>';
+    const center = document.getElementById('rnPreview') || document.getElementById('center');
+    if (center) {
+      center.style.display = 'flex';
+      try { if (previewFrame) previewFrame.style.display = 'none'; } catch (e) {}
+      center.innerHTML = '<div id="noYearsPlaceholder" class="placeholder">No years found in Dropbox.</div>';
+      try { document.body.classList.add('previewFull'); } catch (e) {}
+    }
     return;
   }
 
-  yearSidebar.innerHTML = '';
+  // render centered year cards in the main area (replace the sidebar UX)
+  const center = document.getElementById('rnPreview') || document.getElementById('center');
+  if (!center) return;
+  center.style.display = 'flex';
+  try { if (previewFrame) previewFrame.style.display = 'none'; } catch (e) {}
+  try { document.body.classList.add('previewFull'); } catch (e) {}
+  center.innerHTML = '';
+  const wrapper = document.createElement('div');
+  wrapper.className = 'yearCardsCenter';
+  wrapper.style.display = 'grid';
+  wrapper.style.gridTemplateColumns = 'repeat(auto-fit, minmax(160px, 1fr))';
+  wrapper.style.gap = '18px';
+  wrapper.style.maxWidth = '980px';
+  wrapper.style.margin = '24px auto';
+
   years.forEach(year => {
     const info = yearMap[year];
     const monthList = Array.from(info.months).sort((a, b) => Number(b) - Number(a));
-    
     const card = document.createElement('div');
-    card.className = 'yearCard';
-    
-    const left = document.createElement('div');
-    left.className = 'left';
-    
+    card.className = 'yearCard center';
+    card.style.padding = '18px';
+    card.style.borderRadius = '12px';
+    card.style.boxShadow = '0 8px 20px rgba(2,6,23,0.06)';
+    card.style.background = '#fff';
+    card.style.display = 'flex';
+    card.style.flexDirection = 'column';
+    card.style.justifyContent = 'space-between';
+    card.style.minHeight = '120px';
+
     const title = document.createElement('div');
     title.className = 'yearTitle';
     title.innerText = year;
-    
+    title.style.fontSize = '22px';
+    title.style.fontWeight = '800';
+
     const meta = document.createElement('div');
     meta.className = 'yearMeta';
     meta.innerText = `${info.count} form${info.count !== 1 ? 's' : ''} • ${monthList.length} month${monthList.length !== 1 ? 's' : ''}`;
-    
-    left.appendChild(title);
-    left.appendChild(meta);
-    
+    meta.style.color = '#475569';
+    meta.style.marginTop = '6px';
+
     const actions = document.createElement('div');
-    actions.className = 'actions';
-    
-    const restoreBtn = document.createElement('button');
-    restoreBtn.innerText = 'Restore';
-    restoreBtn.className = 'restore-btn';
-    restoreBtn.addEventListener('click', async () => {
-      try {
-        restoreBtn.disabled = true;
-        restoreBtn.innerText = 'Restoring...';
-        try { restoreBtn.classList.add('loading'); } catch (e) {}
-        try { showSpinner('Restoring...'); } catch (e) {}
-        const res = await window.electronAPI.drive.restoreYear(year);
-        if (!res || !res.ok) showNotification('Restore failed', (res && res.error) || 'unknown', 'error');
-        else {
-          showNotification('Restore complete', `✓ Restored ${res.saved.length} files to app data (restored/${year})`, 'success');
-          try { await loadLocalHistory(); } catch (e) { console.warn('failed to reload local history', e); }
-          // after a successful restore, hide further restore controls
-          try { hideRestoreControls(); } catch (e) {}
-        }
-      } catch (e) { showNotification('Restore failed', String(e), 'error'); } 
-      finally { try { restoreBtn.classList.remove('loading'); } catch (e) {} restoreBtn.disabled = false; restoreBtn.innerText = 'Restore'; try { hideSpinner(); } catch (e) {} }
-    });
-    
-    const detailsBtn = document.createElement('button');
-    detailsBtn.className = 'secondary';
-    detailsBtn.innerText = 'Months';
-    detailsBtn.addEventListener('click', () => showYearDetails(year, monthList));
-    
-    actions.appendChild(restoreBtn);
-    actions.appendChild(detailsBtn);
-    
-    card.appendChild(left);
+    actions.style.marginTop = '12px';
+    actions.style.display = 'flex';
+    actions.style.gap = '8px';
+
+    const viewBtn = document.createElement('button');
+    viewBtn.innerText = 'View Dropbox Forms';
+    viewBtn.style.flex = '1';
+    viewBtn.addEventListener('click', () => showYearFormsModal(year));
+
+    actions.appendChild(viewBtn);
+
+    card.appendChild(title);
+    card.appendChild(meta);
     card.appendChild(actions);
-    yearSidebar.appendChild(card);
+    wrapper.appendChild(card);
   });
+
+  center.appendChild(wrapper);
 }
 
 // Show year details modal
@@ -689,13 +709,6 @@ async function openEntryModal(entry) {
     overlay.appendChild(modal);
     document.body.appendChild(overlay);
 
-    // Close helpers
-    function closeModal() { try { document.body.removeChild(overlay); } catch (e) {} }
-    closeBtn.addEventListener('click', closeModal);
-    overlay.addEventListener('click', (ev) => { if (ev.target === overlay) closeModal(); });
-    const escHandler = (ev) => { if (ev.key === 'Escape') { closeModal(); document.removeEventListener('keydown', escHandler); } };
-    document.addEventListener('keydown', escHandler);
-
     // Render using RN presentational renderer when available
     let renderedByRn = false;
     try { showSpinner('Opening form...'); } catch (e) {}
@@ -775,6 +788,15 @@ async function openEntryModal(entry) {
         try { exportBtn.disabled = false; exportBtn.innerText = 'Export PDF'; } catch (e) {}
         try { hideSpinner(); } catch (e) {}
       }
+    });
+
+    // Close helpers (resolve when modal closed)
+    return new Promise((resolve) => {
+      function closeModal() { try { document.body.removeChild(overlay); } catch (e) {} try { document.removeEventListener('keydown', escHandler); } catch (e) {} resolve(); }
+      closeBtn.addEventListener('click', closeModal);
+      overlay.addEventListener('click', (ev) => { if (ev.target === overlay) closeModal(); });
+      const escHandler = (ev) => { if (ev.key === 'Escape') { closeModal(); } };
+      document.addEventListener('keydown', escHandler);
     });
 
   } catch (e) { console.warn('openEntryModal failed', e); showNotification('Open failed', String(e), 'error'); }
@@ -941,8 +963,7 @@ if (downloadBtn) {
       downloadBtn.innerText = 'Loading...';
       try { downloadBtn.classList.add('loading'); } catch (e) {}
       try { showSpinner('Loading list...'); } catch (e) {}
-      // show the year sidebar and load remote list
-        try { yearSidebar.style.display = 'flex'; } catch (e) {}
+      // show the central year view and load remote list (sidebar removed)
         try {
           // When user explicitly requests Download Forms, ensure restore buttons are visible
           // even if previously hidden after a restore. This only affects the UI temporarily;
@@ -1413,11 +1434,17 @@ function renderList(entries) {
       // only show preview/download for files
       const isFile = f.raw && f.raw['.tag'] === 'file';
       if (isFile) {
-        const pv = document.createElement('button'); pv.innerText = 'Preview'; pv.setAttribute('data-path', f.path_lower);
-        const dl = document.createElement('button'); dl.innerText = 'Download'; dl.setAttribute('data-download', f.path_lower); dl.setAttribute('data-name', f.name);
-        actions.appendChild(pv); actions.appendChild(dl);
-        pv.addEventListener('click', () => previewFile(null, f.path_lower));
-        dl.addEventListener('click', () => downloadFile(null, f.path_lower, f.name));
+        const openB = document.createElement('button'); openB.innerText = 'Open';
+        actions.appendChild(openB);
+        openB.addEventListener('click', async () => {
+          try {
+            const r = await window.electronAPI.drive.downloadToTemp(f.path_lower, f.name);
+            if (!r || !r.ok || !r.path) return showNotification('Open failed', (r && r.error) || 'Download failed', 'error');
+            const localEntry = { title: f.name || f.path_lower, meta: { filePath: r.path } };
+            await openEntryModal(localEntry);
+            try { await window.electronAPI.drive.deleteLocalForm(r.path); } catch (e) {}
+          } catch (e) { console.warn('Open failed', e); showNotification('Open failed', String(e), 'error'); }
+        });
       } else {
         const info = document.createElement('span'); info.className = 'placeholder'; info.innerText = '(folder)'; actions.appendChild(info);
       }
@@ -1454,47 +1481,80 @@ function renderYearRow(entries) {
   } catch (e) { console.warn('renderYearRow error', e); }
 }
 
+// Show a modal listing files for a year (on-demand). Uses temporary links for preview (no download/persist).
+function showYearFormsModal(year) {
+  try {
+    const entries = (currentEntries || []).filter(e => {
+      try { const d = e.server_modified ? new Date(e.server_modified) : null; return d && String(d.getFullYear()) === String(year); } catch (e) { return false; }
+    }).sort((a,b) => new Date(b.server_modified) - new Date(a.server_modified));
+
+    const overlay = document.createElement('div'); overlay.className = 'modalOverlay'; overlay.style.zIndex = 30000;
+    const box = document.createElement('div'); box.className = 'modalBox'; box.style.maxHeight = '80vh'; box.style.overflow = 'auto'; box.style.width = '900px';
+    const h = document.createElement('div'); h.style.fontWeight = '800'; h.style.marginBottom = '8px'; h.innerText = `Dropbox forms — ${year}`;
+    const list = document.createElement('div'); list.style.display = 'flex'; list.style.flexDirection = 'column'; list.style.gap = '8px';
+
+    if (!entries.length) {
+      const p = document.createElement('div'); p.className = 'placeholder'; p.innerText = 'No forms for this year.'; list.appendChild(p);
+    } else {
+      entries.forEach(ent => {
+        const row = document.createElement('div'); row.style.display = 'flex'; row.style.justifyContent = 'space-between'; row.style.alignItems = 'center'; row.style.padding = '8px'; row.style.borderRadius = '8px'; row.style.background = '#f8fafc';
+        const left = document.createElement('div'); left.style.display = 'flex'; left.style.flexDirection = 'column';
+        const name = document.createElement('div'); name.innerText = ent.name || ent.path_lower || '(unnamed)'; name.style.fontWeight = '600';
+        const meta = document.createElement('div'); meta.innerText = ent.server_modified ? new Date(ent.server_modified).toLocaleString() : ''; meta.style.color = '#475569'; meta.style.fontSize = '12px';
+        left.appendChild(name); left.appendChild(meta);
+        const actions = document.createElement('div'); actions.style.display = 'flex'; actions.style.gap = '8px';
+
+        // Single "Open" action: silently download to temp, open using existing modal, then cleanup temp file
+        const open = document.createElement('button'); open.innerText = 'Open';
+        open.addEventListener('click', async () => {
+          try {
+            // download to temp in background (no spinner/notification shown to user)
+            const r = await window.electronAPI.drive.downloadToTemp(ent.path_lower, ent.name);
+            if (!r || !r.ok || !r.path) return showNotification('Open failed', (r && r.error) || 'Download failed', 'error');
+            const localEntry = { title: ent.name || ent.path_lower, meta: { filePath: r.path } };
+            // close the year modal before opening the entry modal
+            try { document.body.removeChild(overlay); } catch (e) {}
+            // open the downloaded file using the same modal/export pipeline
+            try { await openEntryModal(localEntry); } catch (e) { console.warn('openEntryModal failed', e); }
+            // cleanup temp file/directory (best-effort)
+            try { await window.electronAPI.drive.deleteLocalForm(r.path); } catch (e) { /* ignore cleanup failures */ }
+          } catch (e) { console.warn('Open action failed', e); showNotification('Open failed', String(e), 'error'); }
+        });
+
+        actions.appendChild(open);
+        row.appendChild(left); row.appendChild(actions);
+        list.appendChild(row);
+      });
+    }
+
+    const close = document.createElement('button'); close.innerText = 'Close'; close.addEventListener('click', () => { try { document.body.removeChild(overlay); } catch (e) {} });
+    box.appendChild(h); box.appendChild(list); box.appendChild(close);
+    overlay.appendChild(box); document.body.appendChild(overlay);
+    overlay.addEventListener('click', (ev) => { if (ev.target === overlay) try { document.body.removeChild(overlay); } catch (e) {} });
+  } catch (e) { console.warn('showYearFormsModal failed', e); showNotification('Error', String(e), 'error'); }
+}
+
+// Open a remote preview via Dropbox temporary link (no persistent download)
+async function openRemotePreview(entry) {
+  try {
+    showSpinner('Fetching preview link...');
+    const res = await window.electronAPI.drive.getTemporaryLink(entry.path_lower);
+    hideSpinner();
+    if (!res || !res.ok || !res.link) return showNotification('Preview failed', (res && res.error) || 'No temporary link', 'error');
+    const overlay = document.createElement('div'); overlay.className = 'modalOverlay'; overlay.style.zIndex = 32000;
+    const box = document.createElement('div'); box.className = 'modalBox'; box.style.width = '1000px'; box.style.maxHeight = '90vh'; box.style.padding = '8px';
+    const title = document.createElement('div'); title.style.fontWeight = '800'; title.style.marginBottom = '8px'; title.innerText = entry.name || entry.path_lower;
+    const frame = document.createElement('iframe'); frame.style.width = '100%'; frame.style.height = '70vh'; frame.style.border = '0'; frame.src = res.link;
+    const close = document.createElement('button'); close.innerText = 'Close'; close.addEventListener('click', () => { try { document.body.removeChild(overlay); } catch (e) {} });
+    box.appendChild(title); box.appendChild(frame); box.appendChild(close); overlay.appendChild(box); document.body.appendChild(overlay);
+    overlay.addEventListener('click', (ev) => { if (ev.target === overlay) try { document.body.removeChild(overlay); } catch (e) {} });
+  } catch (e) { hideSpinner(); console.warn('openRemotePreview failed', e); showNotification('Preview failed', String(e), 'error'); }
+}
+
 // open a small modal/menu for the year with restore/download options
 function openYearMenu(year, months) {
-  // create overlay
-  const overlay = document.createElement('div'); overlay.style.position = 'fixed'; overlay.style.inset = '0'; overlay.style.background = 'rgba(0,0,0,0.3)'; overlay.style.zIndex = 20000;
-  const box = document.createElement('div'); box.style.position = 'fixed'; box.style.left = '50%'; box.style.top = '50%'; box.style.transform = 'translate(-50%,-50%)'; box.style.background = '#fff'; box.style.padding = '16px'; box.style.borderRadius = '10px'; box.style.minWidth = '320px'; box.style.maxHeight = '70%'; box.style.overflow = 'auto';
-  const title = document.createElement('div'); title.style.fontWeight = '800'; title.style.marginBottom = '8px'; title.innerText = `Year ${year}`;
-  const restoreBtn = document.createElement('button'); restoreBtn.innerText = 'Restore Year'; restoreBtn.style.marginRight = '8px';
-  restoreBtn.addEventListener('click', async () => {
-    restoreBtn.disabled = true; restoreBtn.innerText = 'Restoring...';
-    try {
-      const res = await window.electronAPI.drive.restoreYear(year);
-      if (!res || !res.ok) showNotification('Restore failed', (res && res.error) || 'unknown', 'error');
-      else showNotification('Restore complete', `Restored ${res.saved.length} files to user data/restored/${year}`, 'success');
-      // mark restores complete and hide UI
-      try { hideRestoreControls(); } catch (e) {}
-      try { await loadLocalHistory(); } catch (e) {}
-      close();
-    } catch (e) { showNotification('Restore failed', String(e), 'error'); }
-    finally { restoreBtn.disabled = false; }
-  });
-  const closeBtn = document.createElement('button'); closeBtn.innerText = 'Close'; closeBtn.addEventListener('click', close);
-  const monthsDiv = document.createElement('div'); monthsDiv.style.marginTop = '12px';
-  // months are for filtering/viewing only (no per-month restore)
-  months.sort((a,b) => Number(b) - Number(a)).forEach(m => {
-    const mBtn = document.createElement('button');
-    mBtn.innerText = `${m}/${year}`;
-    mBtn.style.margin = '6px';
-    mBtn.addEventListener('click', () => {
-      try {
-        yearSelect.value = year;
-        monthSelect.value = `${year}-${m}`;
-        renderList(currentEntries);
-        close();
-      } catch (e) { console.warn(e); }
-    });
-    monthsDiv.appendChild(mBtn);
-  });
-  box.appendChild(title); box.appendChild(restoreBtn); box.appendChild(closeBtn); box.appendChild(monthsDiv);
-  overlay.appendChild(box);
-  document.body.appendChild(overlay);
-  function close() { try { document.body.removeChild(overlay); } catch (e) {} }
+  // Legacy per-year menu replaced by the on-demand year modal
+  try { showYearFormsModal(year); } catch (e) { console.warn('openYearMenu fallback failed', e); }
 }
 
 // helper to display account info
@@ -1528,7 +1588,8 @@ if (disconnectBtn) {
         connectBtn.innerText = 'Connect Dropbox';
         document.getElementById('userInfo').style.display = 'none';
         disconnectBtn.style.display = 'none';
-        yearSidebar.innerHTML = '<div id="noYearsPlaceholder" class="placeholder">No years found in Dropbox.</div>';
+        const center = document.getElementById('rnPreview') || document.getElementById('center');
+        if (center) center.innerHTML = '<div id="noYearsPlaceholder" class="placeholder">No years found in Dropbox.</div>';
         updateDropboxStatus(false);
       }
     } catch (e) { console.error(e); showNotification('Error disconnecting', String(e), 'error'); }
