@@ -626,13 +626,14 @@ async function openEntryModal(entry) {
     overlay.style.position = 'fixed';
     overlay.style.inset = '0';
     overlay.style.background = 'rgba(0,0,0,0.45)';
-    overlay.style.zIndex = '22000';
+    overlay.style.zIndex = (entry && entry._overlayZ) ? String(entry._overlayZ) : '22000';
     overlay.style.display = 'flex';
     overlay.style.alignItems = 'center';
     overlay.style.justifyContent = 'center';
 
     const modal = document.createElement('div');
     modal.style.background = '#fff';
+    modal.style.position = 'relative';
     modal.style.borderRadius = '10px';
     modal.style.width = '1400px';
     modal.style.maxWidth = 'calc(100% - 32px)';
@@ -649,20 +650,21 @@ async function openEntryModal(entry) {
     header.style.padding = '8px 12px';
     header.style.borderBottom = '1px solid #eee';
 
+    // Left: title + export button
+    const leftGroup = document.createElement('div');
+    leftGroup.style.display = 'flex';
+    leftGroup.style.alignItems = 'center';
+    leftGroup.style.gap = '12px';
+
     const title = document.createElement('div');
     title.style.fontWeight = '800';
     title.innerText = entry.title || (wrapped && wrapped.payload && (wrapped.payload.title || wrapped.payload.name)) || 'Form';
-
-    const controls = document.createElement('div');
-    controls.style.display = 'flex';
-    controls.style.gap = '8px';
 
     const exportBtn = document.createElement('button');
     exportBtn.innerText = 'Export PDF';
     exportBtn.style.display = 'inline-flex';
     exportBtn.style.alignItems = 'center';
     exportBtn.style.justifyContent = 'center';
-    exportBtn.style.marginRight = '8px';
     exportBtn.style.padding = '10px 16px';
     exportBtn.style.minWidth = '96px';
     exportBtn.style.background = '#0b5bd7';
@@ -670,6 +672,14 @@ async function openEntryModal(entry) {
     exportBtn.style.border = 'none';
     exportBtn.style.borderRadius = '8px';
     exportBtn.style.cursor = 'pointer';
+
+    leftGroup.appendChild(title);
+    leftGroup.appendChild(exportBtn);
+
+    // Right: close button
+    const rightGroup = document.createElement('div');
+    rightGroup.style.display = 'flex';
+    rightGroup.style.alignItems = 'center';
 
     const closeBtn = document.createElement('button');
     closeBtn.innerText = 'Close';
@@ -683,10 +693,10 @@ async function openEntryModal(entry) {
     closeBtn.style.borderRadius = '8px';
     closeBtn.style.cursor = 'pointer';
 
-    controls.appendChild(exportBtn);
-    controls.appendChild(closeBtn);
-    header.appendChild(title);
-    header.appendChild(controls);
+    rightGroup.appendChild(closeBtn);
+
+    header.appendChild(leftGroup);
+    header.appendChild(rightGroup);
 
     const content = document.createElement('div');
     content.style.flex = '1';
@@ -1047,6 +1057,7 @@ function renderLocalHistory(list) {
           const modal = document.createElement('div');
           modal.style.background = '#fff';
           modal.style.borderRadius = '10px';
+          modal.style.position = 'relative';
           // Wider default modal to better accommodate wide tables/forms
           modal.style.width = '1400px';
           // leave a small margin on very narrow windows
@@ -1064,20 +1075,20 @@ function renderLocalHistory(list) {
           header.style.padding = '8px 12px';
           header.style.borderBottom = '1px solid #eee';
 
+          const leftGroup = document.createElement('div');
+          leftGroup.style.display = 'flex';
+          leftGroup.style.alignItems = 'center';
+          leftGroup.style.gap = '12px';
+
           const title = document.createElement('div');
           title.style.fontWeight = '800';
           title.innerText = entry.title || (wrapped && wrapped.payload && (wrapped.payload.title || wrapped.payload.name)) || 'Form';
-
-          const controls = document.createElement('div');
-          controls.style.display = 'flex';
-          controls.style.gap = '8px';
 
           const exportBtn = document.createElement('button');
           exportBtn.innerText = 'Export PDF';
           exportBtn.style.display = 'inline-flex';
           exportBtn.style.alignItems = 'center';
           exportBtn.style.justifyContent = 'center';
-          exportBtn.style.marginRight = '8px';
           exportBtn.style.padding = '10px 16px';
           exportBtn.style.minWidth = '96px';
           exportBtn.style.background = '#0b5bd7';
@@ -1085,6 +1096,13 @@ function renderLocalHistory(list) {
           exportBtn.style.border = 'none';
           exportBtn.style.borderRadius = '8px';
           exportBtn.style.cursor = 'pointer';
+
+          leftGroup.appendChild(title);
+          leftGroup.appendChild(exportBtn);
+
+          const rightGroup = document.createElement('div');
+          rightGroup.style.display = 'flex';
+          rightGroup.style.alignItems = 'center';
 
           const closeBtn = document.createElement('button');
           closeBtn.innerText = 'Close';
@@ -1098,10 +1116,10 @@ function renderLocalHistory(list) {
           closeBtn.style.borderRadius = '8px';
           closeBtn.style.cursor = 'pointer';
 
-          controls.appendChild(exportBtn);
-          controls.appendChild(closeBtn);
-          header.appendChild(title);
-          header.appendChild(controls);
+          rightGroup.appendChild(closeBtn);
+
+          header.appendChild(leftGroup);
+          header.appendChild(rightGroup);
 
           const content = document.createElement('div');
           content.style.flex = '1';
@@ -1232,7 +1250,7 @@ function renderLocalHistory(list) {
         const hit = document.createElement('div'); hit.className = 'search-hit';
         const left = document.createElement('div'); left.style.display = 'flex'; left.style.alignItems = 'center';
         const txt = document.createElement('div'); txt.style.display = 'flex'; txt.style.flexDirection = 'column';
-        const title = document.createElement('div'); title.className = 'title'; title.innerText = entry.title || (entry.meta && entry.meta.payload && entry.meta.payload.title) || entry.name || 'Untitled';
+        const title = document.createElement('div'); title.className = 'title'; title.innerText = getFriendlyTitle(entry, entry && entry.meta && entry.meta.payload ? { payload: entry.meta.payload } : null) || 'Untitled';
         const meta = document.createElement('div'); meta.className = 'search-meta'; meta.innerText = `Saved: ${new Date(entry.savedAt || (entry.meta && entry.meta.savedAt) || Date.now()).toLocaleDateString()}`;
         txt.appendChild(title); txt.appendChild(meta);
         left.appendChild(txt);
@@ -1357,6 +1375,58 @@ function payloadToHtml(payload, title) {
   return html;
 }
 
+// Derive a friendly display name for an entry or payload
+function getFriendlyTitle(entry, wrapped) {
+  try {
+    // Prefer explicit title fields
+    if (entry && entry.title) return String(entry.title);
+    if (wrapped && wrapped.payload) {
+      const p = wrapped.payload;
+      if (p.title) return String(p.title);
+      if (p.name) return String(p.name);
+      if (p.metadata && p.metadata.subject) return String(p.metadata.subject);
+    }
+    // Try entry.meta.payload if present
+    if (entry && entry.meta && entry.meta.payload) {
+      const p = entry.meta.payload;
+      if (p.title) return String(p.title);
+      if (p.name) return String(p.name);
+    }
+    // Fallback: derive from filename/path. Aim to return Dropbox-style title
+    const src = (entry && (entry.name || entry.path_lower)) || '';
+    // strip first 25 characters as a heuristic to remove repeated app tokens
+    let rawName = String(src || '').replace(/\.json$/i, '');
+    try { if (rawName.length > 25) rawName = rawName.slice(25); } catch (e) {}
+    let name = rawName;
+    // split on whitespace, underscores, dashes, dots (Dropbox filenames may use spaces)
+    const parts = name.split(/[\s_\-\.]+/g).map(p => p.trim()).filter(Boolean);
+    const blacklist = [/^checklistapp$/i, /^app$/i, /^id$/i, /^f$/i];
+    const isNoise = (t) => {
+      if (!t) return true;
+      if (/^\d{4,}$/.test(t)) return true; // long numbers/timestamps
+      if (/^[a-z0-9]{6,}$/i.test(t)) return true; // short hash-like
+      if (/^id[_\-]?[a-z0-9]+$/i.test(t)) return true;
+      for (const re of blacklist) if (re.test(t)) return true;
+      return false;
+    };
+    // collect name parts until we hit a noise token (which usually follows the real name)
+    const collected = [];
+    for (const p of parts) {
+      if (isNoise(p)) break;
+      collected.push(p);
+    }
+    let s = (collected.length ? collected.join(' ') : name.replace(/[_\-\.]+/g, ' ')).trim();
+    // If result still contains trailing noise like numeric ids, strip them
+    s = s.replace(/[_\- ]?(id[_\-]?[a-z0-9]+)$/i, '');
+    s = s.replace(/[_\- ]?\d{6,}$/g, '');
+    s = s.replace(/\s+/g, ' ').trim();
+    if (!s) return 'Form';
+    // Preserve original capitalization if it looks human; otherwise Title Case
+    if (/[A-Z]/.test(s) && s === s.trim()) return s;
+    return s.split(' ').map(w => w.length ? (w[0].toUpperCase() + w.slice(1).toLowerCase()) : '').join(' ');
+  } catch (e) { return 'Form'; }
+}
+
 function prepareFilters(entries) {
   // populate year and month selects
   const years = new Set();
@@ -1427,7 +1497,7 @@ function renderList(entries) {
       const el = document.createElement('div');
       el.className = 'fileItem';
       const left = document.createElement('div'); left.className = 'left';
-      const name = document.createElement('div'); name.className = 'fileName'; name.innerText = f.name;
+      const name = document.createElement('div'); name.className = 'fileName'; name.innerText = getFriendlyTitle(f);
       const meta = document.createElement('div'); meta.className = 'meta'; meta.innerText = f.server_modified ? new Date(f.server_modified).toLocaleString() : 'Unknown';
       left.appendChild(name); left.appendChild(meta);
       const actions = document.createElement('div'); actions.className = 'actions';
@@ -1440,7 +1510,7 @@ function renderList(entries) {
           try {
             const r = await window.electronAPI.drive.downloadToTemp(f.path_lower, f.name);
             if (!r || !r.ok || !r.path) return showNotification('Open failed', (r && r.error) || 'Download failed', 'error');
-            const localEntry = { title: f.name || f.path_lower, meta: { filePath: r.path } };
+            const localEntry = { title: getFriendlyTitle(f), meta: { filePath: r.path } };
             await openEntryModal(localEntry);
             try { await window.electronAPI.drive.deleteLocalForm(r.path); } catch (e) {}
           } catch (e) { console.warn('Open failed', e); showNotification('Open failed', String(e), 'error'); }
@@ -1489,46 +1559,215 @@ function showYearFormsModal(year) {
     }).sort((a,b) => new Date(b.server_modified) - new Date(a.server_modified));
 
     const overlay = document.createElement('div'); overlay.className = 'modalOverlay'; overlay.style.zIndex = 30000;
-    const box = document.createElement('div'); box.className = 'modalBox'; box.style.maxHeight = '80vh'; box.style.overflow = 'auto'; box.style.width = '900px';
+    const box = document.createElement('div'); box.className = 'modalBox'; box.style.maxHeight = '80vh'; box.style.overflow = 'auto'; box.style.width = '920px'; box.style.position = 'relative';
     const h = document.createElement('div'); h.style.fontWeight = '800'; h.style.marginBottom = '8px'; h.innerText = `Dropbox forms — ${year}`;
-    const list = document.createElement('div'); list.style.display = 'flex'; list.style.flexDirection = 'column'; list.style.gap = '8px';
 
-    if (!entries.length) {
-      const p = document.createElement('div'); p.className = 'placeholder'; p.innerText = 'No forms for this year.'; list.appendChild(p);
-    } else {
-      entries.forEach(ent => {
-        const row = document.createElement('div'); row.style.display = 'flex'; row.style.justifyContent = 'space-between'; row.style.alignItems = 'center'; row.style.padding = '8px'; row.style.borderRadius = '8px'; row.style.background = '#f8fafc';
-        const left = document.createElement('div'); left.style.display = 'flex'; left.style.flexDirection = 'column';
-        const name = document.createElement('div'); name.innerText = ent.name || ent.path_lower || '(unnamed)'; name.style.fontWeight = '600';
-        const meta = document.createElement('div'); meta.innerText = ent.server_modified ? new Date(ent.server_modified).toLocaleString() : ''; meta.style.color = '#475569'; meta.style.fontSize = '12px';
-        left.appendChild(name); left.appendChild(meta);
-        const actions = document.createElement('div'); actions.style.display = 'flex'; actions.style.gap = '8px';
+    // Filter controls (top of modal): Today, Last N days, date range, clear
+    const controls = document.createElement('div');
+    controls.style.display = 'flex';
+    controls.style.gap = '8px';
+    controls.style.alignItems = 'center';
+    controls.style.marginBottom = '12px';
 
-        // Single "Open" action: silently download to temp, open using existing modal, then cleanup temp file
-        const open = document.createElement('button'); open.innerText = 'Open';
-        open.addEventListener('click', async () => {
-          try {
-            // download to temp in background (no spinner/notification shown to user)
-            const r = await window.electronAPI.drive.downloadToTemp(ent.path_lower, ent.name);
-            if (!r || !r.ok || !r.path) return showNotification('Open failed', (r && r.error) || 'Download failed', 'error');
-            const localEntry = { title: ent.name || ent.path_lower, meta: { filePath: r.path } };
-            // close the year modal before opening the entry modal
-            try { document.body.removeChild(overlay); } catch (e) {}
-            // open the downloaded file using the same modal/export pipeline
-            try { await openEntryModal(localEntry); } catch (e) { console.warn('openEntryModal failed', e); }
-            // cleanup temp file/directory (best-effort)
-            try { await window.electronAPI.drive.deleteLocalForm(r.path); } catch (e) { /* ignore cleanup failures */ }
-          } catch (e) { console.warn('Open action failed', e); showNotification('Open failed', String(e), 'error'); }
+    const todayBtn = document.createElement('button'); todayBtn.innerText = 'Today';
+    const lastNBtn = document.createElement('button'); lastNBtn.innerText = 'Last N days';
+
+    // Create wrapped date pickers with larger clickable surface
+    const fromWrap = document.createElement('div');
+    fromWrap.style.display = 'inline-flex';
+    fromWrap.style.alignItems = 'center';
+    fromWrap.style.border = '1px solid #e2e8f0';
+    fromWrap.style.borderRadius = '8px';
+    fromWrap.style.padding = '8px 12px';
+    fromWrap.style.cursor = 'pointer';
+    fromWrap.style.minWidth = '140px';
+    fromWrap.style.minHeight = '40px';
+    const fromInput = document.createElement('input'); fromInput.type = 'date'; fromInput.title = 'From';
+    fromInput.style.border = 'none'; fromInput.style.background = 'transparent'; fromInput.style.padding = '6px 0'; fromInput.style.width = '100%'; fromInput.style.boxSizing = 'border-box'; fromInput.style.cursor = 'pointer';
+    fromWrap.appendChild(fromInput);
+
+    const toWrap = document.createElement('div');
+    toWrap.style.display = 'inline-flex';
+    toWrap.style.alignItems = 'center';
+    toWrap.style.border = '1px solid #e2e8f0';
+    toWrap.style.borderRadius = '8px';
+    toWrap.style.padding = '8px 12px';
+    toWrap.style.cursor = 'pointer';
+    toWrap.style.minWidth = '140px';
+    toWrap.style.minHeight = '40px';
+    const toInput = document.createElement('input'); toInput.type = 'date'; toInput.title = 'To';
+    toInput.style.border = 'none'; toInput.style.background = 'transparent'; toInput.style.padding = '6px 0'; toInput.style.width = '100%'; toInput.style.boxSizing = 'border-box'; toInput.style.cursor = 'pointer';
+    toWrap.appendChild(toInput);
+
+    const clearBtn = document.createElement('button'); clearBtn.innerText = 'Clear';
+    const infoDiv = document.createElement('div'); infoDiv.style.marginLeft = '8px'; infoDiv.style.color = '#475569'; infoDiv.style.fontSize = '12px';
+
+    controls.appendChild(todayBtn);
+    controls.appendChild(lastNBtn);
+    controls.appendChild(fromWrap);
+    controls.appendChild(toWrap);
+    controls.appendChild(clearBtn);
+    controls.appendChild(infoDiv);
+
+    const listWrapper = document.createElement('div'); listWrapper.style.display = 'flex'; listWrapper.style.flexDirection = 'column'; listWrapper.style.gap = '8px';
+
+    // Helper: group entries by localized day and render
+    function renderGrouped(filtered) {
+      listWrapper.innerHTML = '';
+      if (!filtered || !filtered.length) {
+        const p = document.createElement('div'); p.className = 'placeholder'; p.innerText = 'No forms match the filters.'; listWrapper.appendChild(p); return;
+      }
+      // Group by localized date string
+      const groups = filtered.reduce((acc, item) => {
+        try {
+          const d = item.server_modified ? new Date(item.server_modified) : new Date();
+          const key = d.toLocaleDateString();
+          if (!acc[key]) acc[key] = [];
+          acc[key].push(item);
+        } catch (e) {}
+        return acc;
+      }, {});
+
+      // Sort date groups descending by date
+      const groupKeys = Object.keys(groups).sort((a,b) => new Date(b) - new Date(a));
+      groupKeys.forEach(dateKey => {
+        const heading = document.createElement('div'); heading.className = 'dateHeading'; heading.innerText = dateKey; listWrapper.appendChild(heading);
+        groups[dateKey].sort((a,b) => new Date(b.server_modified) - new Date(a.server_modified)).forEach(ent => {
+          const row = document.createElement('div'); row.style.display = 'flex'; row.style.justifyContent = 'space-between'; row.style.alignItems = 'center'; row.style.padding = '8px'; row.style.borderRadius = '8px'; row.style.background = '#f8fafc';
+          const left = document.createElement('div'); left.style.display = 'flex'; left.style.flexDirection = 'column';
+          const name = document.createElement('div'); name.innerText = (ent && ent.name) ? ent.name : getFriendlyTitle(ent); name.style.fontWeight = '600';
+          const meta = document.createElement('div'); meta.innerText = ent.server_modified ? new Date(ent.server_modified).toLocaleTimeString() : ''; meta.style.color = '#475569'; meta.style.fontSize = '12px';
+          left.appendChild(name); left.appendChild(meta);
+          const actions = document.createElement('div'); actions.style.display = 'flex'; actions.style.gap = '8px';
+
+          const open = document.createElement('button'); open.innerText = 'Open';
+          open.addEventListener('click', async () => {
+            try {
+              const r = await window.electronAPI.drive.downloadToTemp(ent.path_lower, ent.name);
+              if (!r || !r.ok || !r.path) return showNotification('Open failed', (r && r.error) || 'Download failed', 'error');
+              const localEntry = { title: getFriendlyTitle(ent), meta: { filePath: r.path }, _overlayZ: 31000 };
+              // Keep the year modal overlay in the DOM; open the entry modal above it
+              try { await openEntryModal(localEntry); } catch (e) { console.warn('openEntryModal failed', e); }
+              // Best-effort cleanup of the temp file after the entry modal closes
+              try { await window.electronAPI.drive.deleteLocalForm(r.path); } catch (e) {}
+            } catch (e) { console.warn('Open action failed', e); showNotification('Open failed', String(e), 'error'); }
+          });
+
+          actions.appendChild(open);
+          row.appendChild(left); row.appendChild(actions);
+          listWrapper.appendChild(row);
         });
-
-        actions.appendChild(open);
-        row.appendChild(left); row.appendChild(actions);
-        list.appendChild(row);
       });
     }
 
-    const close = document.createElement('button'); close.innerText = 'Close'; close.addEventListener('click', () => { try { document.body.removeChild(overlay); } catch (e) {} });
-    box.appendChild(h); box.appendChild(list); box.appendChild(close);
+    // Filter logic
+    function applyFilters() {
+      try {
+        const f = fromInput.value ? new Date(fromInput.value + 'T00:00:00') : null;
+        const t = toInput.value ? new Date(toInput.value + 'T23:59:59') : null;
+        const filtered = entries.filter(ent => {
+          try {
+            if (!ent.server_modified) return false;
+            const d = new Date(ent.server_modified);
+            if (f && d < f) return false;
+            if (t && d > t) return false;
+            return true;
+          } catch (e) { return false; }
+        });
+        infoDiv.innerText = `${filtered.length} form${filtered.length!==1?'s':''}`;
+        renderGrouped(filtered);
+      } catch (e) { console.warn('applyFilters failed', e); }
+    }
+
+    // Control handlers
+    todayBtn.addEventListener('click', () => {
+      const now = new Date();
+      const iso = now.toISOString().slice(0,10);
+      fromInput.value = iso; toInput.value = iso; applyFilters();
+    });
+    lastNBtn.addEventListener('click', () => {
+      // Inline numeric modal (avoids ugly browser prompt)
+      try {
+        const promptOverlay = document.createElement('div');
+        promptOverlay.style.position = 'fixed';
+        promptOverlay.style.inset = '0';
+        promptOverlay.style.background = 'rgba(0,0,0,0.35)';
+        promptOverlay.style.display = 'flex';
+        promptOverlay.style.alignItems = 'center';
+        promptOverlay.style.justifyContent = 'center';
+        promptOverlay.style.zIndex = '30600';
+
+        const promptBox = document.createElement('div');
+        promptBox.style.background = '#fff';
+        promptBox.style.padding = '14px';
+        promptBox.style.borderRadius = '8px';
+        promptBox.style.minWidth = '260px';
+        promptBox.style.boxShadow = '0 8px 24px rgba(0,0,0,0.2)';
+
+        const lbl = document.createElement('div'); lbl.innerText = 'Enter number of days'; lbl.style.fontWeight = '700'; lbl.style.marginBottom = '8px';
+        const num = document.createElement('input'); num.type = 'number'; num.min = '1'; num.value = '7'; num.style.width = '100%'; num.style.padding = '8px'; num.style.marginBottom = '10px'; num.style.boxSizing = 'border-box';
+        const actions = document.createElement('div'); actions.style.display = 'flex'; actions.style.justifyContent = 'flex-end'; actions.style.gap = '8px';
+        const cancel = document.createElement('button'); cancel.innerText = 'Cancel'; cancel.style.padding = '8px 10px'; cancel.style.border = '1px solid #ddd'; cancel.style.borderRadius = '6px';
+        const ok = document.createElement('button'); ok.innerText = 'OK'; ok.style.padding = '8px 10px'; ok.style.background = '#0b5bd7'; ok.style.color = '#fff'; ok.style.border = 'none'; ok.style.borderRadius = '6px';
+        actions.appendChild(cancel); actions.appendChild(ok);
+        promptBox.appendChild(lbl); promptBox.appendChild(num); promptBox.appendChild(actions);
+        promptOverlay.appendChild(promptBox);
+        document.body.appendChild(promptOverlay);
+
+        cancel.addEventListener('click', () => { try { document.body.removeChild(promptOverlay); } catch (e) {} });
+        ok.addEventListener('click', () => {
+          try {
+            const nn = Number(num.value);
+            if (!nn || nn <= 0) return;
+            const now = new Date();
+            const from = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (nn - 1));
+            fromInput.value = from.toISOString().slice(0,10);
+            toInput.value = now.toISOString().slice(0,10);
+            applyFilters();
+          } catch (e) { console.warn('LastN apply failed', e); }
+          try { document.body.removeChild(promptOverlay); } catch (e) {}
+        });
+        promptOverlay.addEventListener('click', (ev) => { if (ev.target === promptOverlay) try { document.body.removeChild(promptOverlay); } catch (e) {} });
+      } catch (e) { console.warn('lastN click failed', e); }
+    });
+    fromInput.addEventListener('change', applyFilters);
+    toInput.addEventListener('change', applyFilters);
+    // Make wrapper clickable to open date picker / focus
+    fromWrap.addEventListener('click', () => {
+      try {
+        if (typeof fromInput.showPicker === 'function') return fromInput.showPicker();
+        fromInput.focus();
+        fromInput.click();
+      } catch (e) {}
+    });
+    toWrap.addEventListener('click', () => {
+      try {
+        if (typeof toInput.showPicker === 'function') return toInput.showPicker();
+        toInput.focus();
+        toInput.click();
+      } catch (e) {}
+    });
+    clearBtn.addEventListener('click', () => { fromInput.value = ''; toInput.value = ''; infoDiv.innerText = ''; renderGrouped(entries); });
+
+    // initial render
+    box.appendChild(h); box.appendChild(controls); box.appendChild(listWrapper);
+    renderGrouped(entries);
+
+    const close = document.createElement('button'); close.innerText = 'Close';
+    try {
+      close.style.position = 'absolute';
+      close.style.top = '10px';
+      close.style.right = '12px';
+      close.style.zIndex = '30100';
+      close.style.background = '#ffecec';
+      close.style.color = '#b91c1c';
+      close.style.border = '1px solid #f5c6c6';
+      close.style.padding = '8px 10px';
+      close.style.borderRadius = '8px';
+      close.style.cursor = 'pointer';
+    } catch (e) {}
+    close.addEventListener('click', (ev) => { ev.stopPropagation(); try { document.body.removeChild(overlay); } catch (e) {} });
+    box.appendChild(close);
     overlay.appendChild(box); document.body.appendChild(overlay);
     overlay.addEventListener('click', (ev) => { if (ev.target === overlay) try { document.body.removeChild(overlay); } catch (e) {} });
   } catch (e) { console.warn('showYearFormsModal failed', e); showNotification('Error', String(e), 'error'); }
@@ -1542,10 +1781,12 @@ async function openRemotePreview(entry) {
     hideSpinner();
     if (!res || !res.ok || !res.link) return showNotification('Preview failed', (res && res.error) || 'No temporary link', 'error');
     const overlay = document.createElement('div'); overlay.className = 'modalOverlay'; overlay.style.zIndex = 32000;
-    const box = document.createElement('div'); box.className = 'modalBox'; box.style.width = '1000px'; box.style.maxHeight = '90vh'; box.style.padding = '8px';
+    const box = document.createElement('div'); box.className = 'modalBox'; box.style.width = '1000px'; box.style.maxHeight = '90vh'; box.style.padding = '8px'; box.style.position = 'relative';
     const title = document.createElement('div'); title.style.fontWeight = '800'; title.style.marginBottom = '8px'; title.innerText = entry.name || entry.path_lower;
     const frame = document.createElement('iframe'); frame.style.width = '100%'; frame.style.height = '70vh'; frame.style.border = '0'; frame.src = res.link;
-    const close = document.createElement('button'); close.innerText = 'Close'; close.addEventListener('click', () => { try { document.body.removeChild(overlay); } catch (e) {} });
+    const close = document.createElement('button'); close.innerText = 'Close';
+    try { close.style.position = 'absolute'; close.style.top = '10px'; close.style.right = '12px'; close.style.zIndex = '32100'; } catch (e) {}
+    close.addEventListener('click', () => { try { document.body.removeChild(overlay); } catch (e) {} });
     box.appendChild(title); box.appendChild(frame); box.appendChild(close); overlay.appendChild(box); document.body.appendChild(overlay);
     overlay.addEventListener('click', (ev) => { if (ev.target === overlay) try { document.body.removeChild(overlay); } catch (e) {} });
   } catch (e) { hideSpinner(); console.warn('openRemotePreview failed', e); showNotification('Preview failed', String(e), 'error'); }
