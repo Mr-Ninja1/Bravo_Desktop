@@ -144,6 +144,35 @@ ipcMain.handle('save-file', async (event, relPath, content) => {
 ipcMain.handle('drive-signin', async () => {
   try {
     const res = await drive.signIn();
+    // Debug log
+    try { console.log('main: drive.signIn completed'); } catch (e) {}
+    // Notify renderer windows that sign-in completed so they can refresh UI and focus
+    try {
+      const wins = BrowserWindow.getAllWindows();
+      wins.forEach(w => {
+        try { w.webContents.send('drive-signed-in', { ok: true, res }); } catch (e) {}
+        try { w.focus(); } catch (e) {}
+      });
+    } catch (e) {}
+    // Try reloading renderer windows first; fallback to full relaunch if reload doesn't unfreeze UI
+    try {
+      const wins = BrowserWindow.getAllWindows();
+      if (wins && wins.length) {
+        wins.forEach(w => {
+          try { if (w && w.webContents && typeof w.webContents.reloadIgnoringCache === 'function') w.webContents.reloadIgnoringCache(); } catch (e) {}
+        });
+        // If reloading doesn't resolve the freeze within a short timeout, attempt relaunch as a last resort
+        setTimeout(() => {
+          try {
+            try { app.relaunch(); app.exit(0); } catch (e) { /* best-effort */ }
+          } catch (e) { try { app.relaunch(); app.exit(0); } catch (ee) {} }
+        }, 3000);
+      } else {
+        setTimeout(() => { try { app.relaunch(); app.exit(0); } catch (e) {} }, 250);
+      }
+    } catch (e) {
+      try { setTimeout(() => { app.relaunch(); app.exit(0); }, 250); } catch (ee) {}
+    }
     return { ok: true, res };
   } catch (e) { return { ok: false, error: String(e) }; }
 });

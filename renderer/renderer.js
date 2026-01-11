@@ -6,7 +6,8 @@ const loadingMsg = document.getElementById('loadingMsg');
 let connectBtn = null;
 const refreshBtn = document.getElementById('refreshList');
 const yearSidebar = document.getElementById('yearSidebar');
-const previewFrame = document.getElementById('previewFrame');
+// iframe removed from the layout; keep null so guarded checks are inert
+const previewFrame = null;
 let downloadBtn = null;
 const searchInput = document.getElementById('searchInput');
 const sidebarToggleBtn = document.getElementById('sidebarToggleBtn');
@@ -37,7 +38,7 @@ function initFooter() {
       // create a minimal footer if none present
       keeper = document.createElement('footer');
       keeper.className = 'app-footer';
-      keeper.innerHTML = '<div class="devInfo">Developed by RAJAB CULTURE DIGITAL SOLUTIONS  · <span class="muted">(RC DIGITAl)</span></div>\n      <div class="footerActions">\n        <img id="dropboxIcon" src="src/assets/dropbox.png" alt="Dropbox" width="20" height="20" />\n        <span id="dropboxStatus" class="dropbox-status">Checking…</span>\n        <div style="width:8px"></div>\n        <button id="downloadFormsBtn" disabled>Download Forms</button>\n        <button id="connectDropbox">Connect Dropbox</button>\n        <button id="disconnectDropbox" style="display:none">Disconnect</button>\n      </div>';
+      keeper.innerHTML = '<div class="devInfo">Developed by RAJAB CULTURE DIGITAL SOLUTIONS  · <span class="muted">(RC DIGITAl)</span></div>\n      <div class="footerActions" style="display:none"></div>';
       document.body.appendChild(keeper);
     }
 
@@ -263,83 +264,33 @@ if (disableSplash) {
 initFooter();
 // Sidebar should remain visible to show year cards
 
-connectBtn.addEventListener('click', async () => {
-  connectBtn.disabled = true;
-  const prev = connectBtn.innerText;
-  connectBtn.innerText = 'Connecting...';
-  try { connectBtn.classList.add('loading'); } catch (e) {}
-  try { showSpinner('Connecting...'); } catch (e) {}
-  try {
-    const res = await window.electronAPI.drive.signIn();
-    if (!res || !res.ok) {
-      showNotification('Sign-in failed', (res && res.error) || 'unknown', 'error');
-    } else {
-      // Immediately mark the connect button as connected (visual) and
-      // attempt to load account info right away. This helps when some
-      // environments update the button label before the account is
-      // available via the usual polling mechanism.
-      try { connectBtn.innerText = 'Connected'; } catch (e) {}
-      try {
-        await loadAccountAfterSignIn();
-      } catch (e) { console.warn('immediate loadAccountAfterSignIn failed', e); }
-      try {
-        const acc = await window.electronAPI.drive.getAccount().catch(() => null);
-        if (acc && acc.ok && acc.info) {
-          try { updateDropboxStatus(true, acc.info); } catch (e) {}
-        }
-      } catch (e) { console.warn('post-signin account check failed', e); }
-
-      // After initiating sign-in, poll for the OAuth completion (token persistence)
-      const waitForSignIn = async (timeoutMs = 20000, interval = 1000) => {
-        const start = Date.now();
-        while (Date.now() - start < timeoutMs) {
-          try {
-            const dbg = await window.electronAPI.drive.getDebug();
-            if (dbg && dbg.ok && dbg.info && dbg.info.hasRefreshToken) return dbg.info;
-            // also try getAccount as a fallback
-            const acc = await window.electronAPI.drive.getAccount().catch(() => null);
-            if (acc && acc.ok && acc.info) return acc.info;
-          } catch (e) {}
-          await new Promise(r => setTimeout(r, interval));
-        }
-        return null;
-      };
-
-      const info = await waitForSignIn(30000, 1000);
-      if (!info) {
-        // final attempt to fetch debug/account
-        try { await loadAccountAfterSignIn(); } catch (e) { console.warn('final account load failed', e); }
-        showNotification('Sign-in pending', 'Sign-in may not have completed. If you finished OAuth in the browser, bring the app to the foreground or try connecting again.', 'error');
-      } else {
-        // mark connected UI, load files and account
-        try { showNotification('Sign-in successful', 'Dropbox is connected.', 'success'); } catch (e) {}
-        try { await loadAccountAfterSignIn(); } catch (e) { console.warn(e); }
-        try { await loadDropboxFiles(); } catch (e) { console.warn('loadDropboxFiles after sign-in failed', e); }
-      }
-    }
-  } catch (e) {
-    console.error(e);
-    showNotification('Sign-in failed', String(e), 'error');
-  } finally {
-    try { connectBtn.classList.remove('loading'); } catch (e) {}
-    connectBtn.disabled = false;
-    connectBtn.innerText = prev;
-    try { hideSpinner(); } catch (e) {}
-  }
-});
+// Connect logic is now handled by the stat card connect button in renderStatsCards
 
 refreshBtn.addEventListener('click', loadDropboxFiles);
 
+function isDropboxActive() {
+  try { return document.body.classList && document.body.classList.contains('dropbox-active'); } catch (e) { return false; }
+}
+
 async function loadDropboxFiles() {
   // keep a central loading state while we fetch the remote index
-  const center = document.getElementById('rnPreview') || document.getElementById('center');
+  const center = document.getElementById('displayContainer') || document.getElementById('center');
+  // Ensure we are connected before attempting to list Dropbox files. If not connected,
+  // show a subtle placeholder prompting the user to connect and do not render remote data.
+  try {
+    if (window.electronAPI && window.electronAPI.drive && typeof window.electronAPI.drive.getDebug === 'function') {
+      const dbg = await window.electronAPI.drive.getDebug().catch(() => null);
+      if (!dbg || !dbg.ok || !dbg.info || !dbg.info.hasRefreshToken) {
+        if (center) center.innerHTML = '<div class="placeholder">Not connected to Dropbox. Click "Connect" to sync forms.</div>';
+        return;
+      }
+    }
+  } catch (e) { /* ignore and continue */ }
   if (center) {
     center.style.display = 'flex';
-    try { if (previewFrame) previewFrame.style.display = 'none'; } catch (e) {}
-    center.innerHTML = '<div class="placeholder">Loading Dropbox index…</div>';
-    try { document.body.classList.add('previewFull'); } catch (e) {}
+    // Do not show a loading placeholder here — keep the watermark visible until results arrive
   }
-  yearSidebar && (yearSidebar.style.display = 'none');
+  // ensure sidebar remains visible; year cards will be rendered once connected
   try {
     const res = await window.electronAPI.drive.listFilesRecursive('');
     if (!res || !res.ok) {
@@ -353,12 +304,36 @@ async function loadDropboxFiles() {
       if (center) center.innerHTML = '<div class="placeholder">No files found in Dropbox.</div>';
       return;
     }
+    // Render modern stat cards in preview space
+    renderStatsCards(entries);
+    // Render year cards as before
     renderYearCards(entries);
+    // Align stats row vertically with the first year card
+    try { setTimeout(alignStatsRow, 40); } catch (e) {}
   } catch (err) {
     console.error(err);
     if (center) center.innerHTML = '<div class="placeholder">Error loading files.</div>';
   }
 }
+
+function alignStatsRow() {
+  try {
+    const stats = document.querySelector('.statsRow');
+    const firstYear = document.querySelector('#localList .yearCardsSidebar .yearCard.center');
+    const rn = document.getElementById('displayContainer') || document.getElementById('center');
+    if (!stats || !firstYear || !rn) return;
+    const yrRect = firstYear.getBoundingClientRect();
+    const rnRect = rn.getBoundingClientRect();
+    let top = yrRect.top - rnRect.top;
+    if (top < 0) top = 0;
+    // Add small offset to avoid overlap with container border
+    top = Math.max(2, Math.round(top));
+    stats.style.top = top + 'px';
+  } catch (e) { console.warn('alignStatsRow failed', e); }
+}
+
+// Keep alignment on window resize
+try { window.addEventListener('resize', () => { try { alignStatsRow(); } catch (e) {} }); } catch (e) {}
 
 // Hide restore controls after a successful restore so users don't keep seeing restore buttons
 function hideRestoreControls() {
@@ -373,6 +348,22 @@ try { if (localStorage.getItem('restoreCompleted')) document.body.classList.add(
 
 // Render year cards
 function renderYearCards(entries) {
+  try {
+    if (!isDropboxActive()) {
+      const localList = document.getElementById('localList');
+      if (!localList) return;
+      localList.innerHTML = '';
+      const wrapper = document.createElement('div'); wrapper.className = 'yearCardsSidebar';
+      const card = document.createElement('div'); card.className = 'yearCard center';
+      const badge = document.createElement('div'); badge.className = 'statusBadge'; badge.innerText = 'NOT CONNECTED'; card.appendChild(badge);
+      const title = document.createElement('div'); title.className = 'yearTitle'; title.innerText = 'Dropbox disconnected'; card.appendChild(title);
+      const metaRow = document.createElement('div'); metaRow.className = 'yearMetaRow'; metaRow.innerHTML = '<div class="metaItem">Connect to sync and view years</div>'; card.appendChild(metaRow);
+      const actions = document.createElement('div'); actions.style.marginTop = '12px';
+      const btn = document.createElement('button'); btn.className = 'glowBtn'; btn.innerText = 'Connect';
+      btn.addEventListener('click', async () => { try { if (connectBtn && typeof connectBtn.click === 'function') return connectBtn.click(); if (window.electronAPI && window.electronAPI.drive && typeof window.electronAPI.drive.signIn === 'function') { await window.electronAPI.drive.signIn(); } } catch (e) { console.warn('connect from placeholder failed', e); } });
+      actions.appendChild(btn); card.appendChild(actions); wrapper.appendChild(card); localList.appendChild(wrapper); return;
+    }
+  } catch (e) { console.warn('renderYearCards early exit failed', e); }
   const yearMap = {};
   entries.forEach(e => {
     try {
@@ -439,10 +430,10 @@ function renderYearCards(entries) {
   });
 }
 
-// Render top-level stats: total forms, forms today, and Dropbox connect card
+// Render top-level stats: total forms and forms today
 function renderStatsCards(entries) {
   try {
-    const center = document.getElementById('rnPreview') || document.getElementById('center');
+    const center = document.getElementById('displayContainer') || document.getElementById('center');
     if (!center) return;
     // remove existing stats row if present
     const existing = center.querySelector('.statsRow');
@@ -451,17 +442,19 @@ function renderStatsCards(entries) {
     const statsRow = document.createElement('div');
     statsRow.className = 'statsRow';
 
+    // Only count actual file entries (exclude folders)
+    const fileEntries = (entries || []).filter(e => e && (e.raw && (e.raw['.tag'] === 'file') || e['.tag'] === 'file' || (e.raw && e.raw['.tag'] === 'file')));
     const total = document.createElement('div');
     total.className = 'statCard';
     const totalVal = document.createElement('div'); totalVal.className = 'statValue';
-    totalVal.innerText = (entries && entries.length) ? String(entries.length) : '0';
+    totalVal.innerText = (fileEntries && fileEntries.length) ? String(fileEntries.length) : '0';
     const totalLabel = document.createElement('div'); totalLabel.className = 'statLabel'; totalLabel.innerText = 'Total forms in Dropbox';
     total.appendChild(totalVal); total.appendChild(totalLabel);
 
     const today = document.createElement('div');
     today.className = 'statCard';
     const todayVal = document.createElement('div'); todayVal.className = 'statValue';
-    const todayCount = (entries || []).reduce((acc, e) => {
+    const todayCount = (fileEntries || []).reduce((acc, e) => {
       try {
         if (!e || !e.server_modified) return acc;
         const d = new Date(e.server_modified);
@@ -480,11 +473,10 @@ function renderStatsCards(entries) {
     const connTitle = document.createElement('div'); connTitle.className = 'statValue'; connTitle.style.fontSize = '18px'; connTitle.innerText = document.body.classList.contains('dropbox-active') ? 'Dropbox — Connected' : 'Connect Dropbox';
     const connHint = document.createElement('div'); connHint.className = 'hint'; connHint.innerText = document.body.classList.contains('dropbox-active') ? 'Account connected' : 'Connect to sync and download forms';
     const connBtn = document.createElement('button'); connBtn.className = 'glowBtn'; connBtn.style.alignSelf = 'stretch'; connBtn.innerText = document.body.classList.contains('dropbox-active') ? 'Manage Connection' : 'Connect';
+    try { if (document.body.classList.contains('dropbox-active')) connect.classList.add('connected'); else connect.classList.remove('connected'); } catch (e) {}
     connBtn.addEventListener('click', async () => {
       try {
-        // prefer the existing connect UI if available
         if (connectBtn && typeof connectBtn.click === 'function') return connectBtn.click();
-        // fallback: attempt to call the API
         if (window.electronAPI && window.electronAPI.drive && typeof window.electronAPI.drive.signIn === 'function') {
           try { await window.electronAPI.drive.signIn(); } catch (e) {}
         }
@@ -505,12 +497,17 @@ function updateConnectCard() {
     const card = document.getElementById('dropboxConnectCard');
     if (!card) return;
     const isActive = document.body.classList.contains('dropbox-active');
+    console.debug && console.debug('updateConnectCard: isActive=', isActive);
     const title = card.querySelector('.statValue');
     const hint = card.querySelector('.hint');
     const btn = card.querySelector('button');
     if (title) title.innerText = isActive ? 'Dropbox — Connected' : 'Connect Dropbox';
     if (hint) hint.innerText = isActive ? 'Account connected' : 'Connect to sync and download forms';
     if (btn) btn.innerText = isActive ? 'Manage Connection' : 'Connect';
+    try {
+      if (isActive) { card.classList.add('connected'); if (btn) btn.classList.add('connected'); }
+      else { card.classList.remove('connected'); if (btn) btn.classList.remove('connected'); }
+    } catch (e) {}
   } catch (e) { console.warn('updateConnectCard failed', e); }
 }
 
@@ -587,6 +584,7 @@ async function checkExistingSignIn() {
   try {
     const dbg = await window.electronAPI.drive.getDebug();
     if (dbg && dbg.ok && dbg.info && dbg.info.hasRefreshToken) {
+      console.debug && console.debug('renderer: checkExistingSignIn - refresh token present');
       // mark connected and load files
       try { connectBtn.innerText = 'Connected'; } catch (e) {}
       // fetch account and show user info
@@ -595,6 +593,13 @@ async function checkExistingSignIn() {
         if (acc && acc.ok && acc.info) showAccount(acc.info);
       } catch (e) { console.warn('failed to get account', e); }
       await loadDropboxFiles();
+      try { updateDropboxStatus(true); } catch (e) {}
+    }
+    else {
+      // Not signed in: ensure the connect card is visible so user can initiate sign-in
+      try { updateDropboxStatus(false); } catch (e) {}
+      try { renderStatsCards([]); } catch (e) {}
+      try { renderYearCards([]); } catch (e) {}
     }
   } catch (e) {
     console.warn('renderer: failed to check existing sign-in', e);
@@ -614,12 +619,30 @@ try {
   window.addEventListener('focus', () => { try { checkExistingSignIn(); } catch (e) {} });
 } catch (e) { console.warn('focus/visibility handlers failed', e); }
 
+// Listen for main process notification that OAuth sign-in completed in external browser
+try {
+  if (window.electronAPI && window.electronAPI.drive && typeof window.electronAPI.drive.onSignedIn === 'function') {
+    window.electronAPI.drive.onSignedIn((info) => {
+      try {
+        console.debug && console.debug('renderer: onSignedIn received', info);
+        // Ensure the connect card is present immediately so UI updates are visible
+        try { renderStatsCards([]); } catch (e) { console.warn('renderStatsCards onSignedIn failed', e); }
+        // Mark connected and update visuals
+        try { updateDropboxStatus(true, info && info.res && info.res.info ? info.res.info : null); } catch (e) { console.warn('updateDropboxStatus onSignedIn failed', e); }
+        // Fetch account info and reload lists
+        try { if (typeof loadAccountAfterSignIn === 'function') loadAccountAfterSignIn(); } catch (e) { console.warn('loadAccountAfterSignIn onSignedIn failed', e); }
+        try { loadDropboxFiles(); } catch (e) { console.warn('loadDropboxFiles onSignedIn failed', e); }
+      } catch (e) { console.warn('onSignedIn handler failed', e); }
+    });
+  }
+} catch (e) { console.warn('drive onSignedIn wiring failed', e); }
+
 // Shared preview close routine
 function closePreview() {
   try { document.body.classList.remove('previewFull'); } catch (e) {}
-  const rnMount = document.getElementById('rnPreview');
+  const rnMount = document.getElementById('displayContainer');
   if (rnMount) { rnMount.style.display = 'none'; try { rnMount.innerHTML = ''; } catch (e) {} }
-  if (previewFrame) { try { previewFrame.style.display = 'block'; previewFrame.srcdoc = ''; } catch (e) {} }
+  // iframe removed: nothing to restore
 }
 
 // Close preview on Escape key for discoverable keyboard-based exit
@@ -1039,12 +1062,43 @@ if (downloadBtn) {
   });
 }
 
+// Dev/test helper: small subtle disconnect-all button to clear Dropbox tokens and refresh UI
+try {
+  const testBtnId = 'forceDisconnectDropboxBtn';
+  if (!document.getElementById(testBtnId)) {
+    const tb = document.createElement('button');
+    tb.id = testBtnId;
+    tb.innerText = 'Disconnect Dropbox';
+    tb.style.position = 'fixed';
+    tb.style.left = '8px';
+    tb.style.bottom = '12px';
+    tb.style.zIndex = '65000';
+    tb.style.background = 'transparent';
+    tb.style.border = '1px solid rgba(255,255,255,0.06)';
+    tb.style.color = '#fff';
+    tb.style.padding = '6px 8px';
+    tb.style.borderRadius = '8px';
+    tb.style.fontSize = '12px';
+    tb.style.cursor = 'pointer';
+    tb.title = 'Test: clear Dropbox tokens and refresh UI';
+    tb.addEventListener('click', async () => {
+      try {
+        if (window.electronAPI && window.electronAPI.drive && typeof window.electronAPI.drive.signOut === 'function') {
+          await window.electronAPI.drive.signOut();
+        }
+      } catch (e) { console.warn('test disconnect failed', e); }
+      try { updateDropboxStatus(false); } catch (e) {}
+    });
+    document.body.appendChild(tb);
+  }
+} catch (e) { console.warn('failed to add test disconnect button', e); }
+
 // Removed renderLocalHistory: local/restored forms are no longer displayed. Year cards are now rendered in #localList.
 
   // Render search results in the center preview (`#rnPreview`) as clickable cards
   function showSearchResultsInCenter(results) {
     try {
-      const rn = document.getElementById('rnPreview');
+      const rn = document.getElementById('displayContainer') || document.getElementById('center');
       if (!rn) return;
       // prepare container
       rn.innerHTML = '';
@@ -1056,8 +1110,6 @@ if (downloadBtn) {
       if (!results || !results.length) {
         const p = document.createElement('div'); p.className = 'placeholder'; p.innerText = 'No results'; wrapper.appendChild(p);
         rn.appendChild(wrapper);
-        // hide iframe
-        try { if (previewFrame) previewFrame.style.display = 'none'; } catch (e) {}
         document.body.classList.add('previewFull');
         return;
       }
@@ -1077,7 +1129,6 @@ if (downloadBtn) {
         wrapper.appendChild(hit);
       });
       rn.appendChild(wrapper);
-      try { if (previewFrame) previewFrame.style.display = 'none'; } catch (e) {}
       document.body.classList.add('previewFull');
     } catch (e) { console.warn('showSearchResultsInCenter failed', e); }
   }
@@ -1085,7 +1136,7 @@ if (downloadBtn) {
   // Preview a single entry inside the center `#rnPreview` using RN renderer or iframe fallback
   async function previewEntry(entry) {
     try {
-      const rn = document.getElementById('rnPreview');
+      const rn = document.getElementById('displayContainer') || document.getElementById('center');
       if (!rn) return;
       // clear results area and prepare mount
       rn.innerHTML = '';
@@ -1644,7 +1695,7 @@ if (disconnectBtn) {
         connectBtn.innerText = 'Connect Dropbox';
         document.getElementById('userInfo').style.display = 'none';
         disconnectBtn.style.display = 'none';
-        const center = document.getElementById('rnPreview') || document.getElementById('center');
+        const center = document.getElementById('displayContainer') || document.getElementById('center');
         if (center) center.innerHTML = '<div id="noYearsPlaceholder" class="placeholder">No years found in Dropbox.</div>';
         updateDropboxStatus(false);
       }
@@ -1713,6 +1764,11 @@ function updateDropboxStatus(connected, info) {
     }
 
     if (connected) {
+      // clear any placeholders and ensure we render remote lists if needed
+      try {
+        const center = document.getElementById('displayContainer') || document.getElementById('center');
+        if (center && center.querySelector('.placeholder')) center.innerHTML = '';
+      } catch (e) {}
       // remove any legacy status text elements — we don't render a status string anymore
       try { Array.from(document.querySelectorAll('#dropboxStatus')).forEach(n => { try { n.remove(); } catch (e) {} }); } catch (e) {}
       if (footers && footers.length) {
@@ -1775,7 +1831,21 @@ function updateDropboxStatus(connected, info) {
         } catch (e) { console.warn('defensive download button update failed', e); }
       } catch (e) {}
       try { updateConnectCard(); } catch (e) {}
+      // Ensure sidebar placeholder is removed and year cards are rendered when connected
+      try {
+        const localList = document.getElementById('localList');
+        if (localList) {
+          try { if (typeof renderYearCards === 'function') renderYearCards(currentEntries || []); else localList.innerHTML = ''; } catch (e) { localList.innerHTML = ''; }
+        }
+      } catch (e) {}
     } else {
+      try {
+          // clear remote entries cache and render disconnected placeholder in year sidebar
+          currentEntries = [];
+          const center = document.getElementById('displayContainer') || document.getElementById('center');
+          if (center) center.innerHTML = '<div class="placeholder">Not connected to Dropbox.</div>';
+          try { if (typeof renderYearCards === 'function') renderYearCards([]); } catch (e) {}
+      } catch (e) {}
       // remove any legacy status text elements
       try { Array.from(document.querySelectorAll('#dropboxStatus')).forEach(n => { try { n.remove(); } catch (e) {} }); } catch (e) {}
       if (footers && footers.length) {

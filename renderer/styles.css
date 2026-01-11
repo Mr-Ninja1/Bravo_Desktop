@@ -1,3 +1,72 @@
+/* Futuristic Stat Cards for Preview Space */
+.previewStatsRow {
+	display: flex;
+	gap: 28px;
+	align-items: stretch;
+	justify-content: center;
+	padding: 32px 0 18px 0;
+	display: grid; grid-template-columns: 320px 1fr; gap: 0; margin-top: 18px; height: 100%; overflow: hidden;
+	max-width: 1200px;
+	margin: 0 auto;
+}
+.statCard {
+	flex: 1;
+	min-width: 220px;
+	background: linear-gradient(135deg, #23263a 80%, #23263a 100%) !important;
+	border-radius: 18px !important;
+	box-shadow: 0 8px 40px 0 rgba(0,0,0,0.32) !important;
+	border: 1.5px solid rgba(120,130,180,0.18) !important;
+	padding: 28px 24px 24px 24px !important;
+	color: #f8fafc !important;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	position: relative;
+	transition: box-shadow 0.18s, border-color 0.18s;
+	
+}
+.statCard .statValue {
+	font-size: 32px;
+	font-weight: 900;
+	margin-bottom: 8px;
+	color: #fff;
+	text-shadow: 0 2px 12px #1ea7ff22;
+}
+.statCard .statLabel {
+	font-size: 15px;
+	color: #b6c2cf;
+	margin-bottom: 10px;
+	text-align: center;
+}
+.statCard .statAction {
+	margin-top: 18px;
+	width: 100%;
+	display: flex;
+	justify-content: center;
+}
+.statCard .glowBtn {
+	background: linear-gradient(90deg, #1ea7ff, #6f5cff);
+	color: #fff;
+	border: none;
+	border-radius: 10px;
+	font-weight: 700;
+	font-size: 15px;
+	padding: 10px 28px;
+	box-shadow: 0 0 24px #1ea7ff44;
+	transition: background 0.18s, box-shadow 0.18s;
+}
+.statCard .glowBtn:hover {
+	background: linear-gradient(90deg, #6f5cff, #1ea7ff);
+	box-shadow: 0 0 36px #6f5cff66;
+}
+.statCard.connected {
+	border-color: #1ea7ff !important;
+	box-shadow: 0 0 32px #1ea7ff33 !important;
+}
+.statCard.disconnected {
+	border-color: #e74c3c !important;
+	box-shadow: 0 0 32px #e74c3c33 !important;
+}
 /* Modern Dropbox Forms Modal Styles */
 .modalOverlay {
 	background: rgba(20, 24, 40, 0.75) !important;
@@ -123,8 +192,8 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=JetBrains+Mono&display=swap');
 
 .statCard, .yearCard, #landingWhite, .modalBox {
-	background: var(--glass) !important;
-		color: #444 !important;
+	background: linear-gradient(135deg, #23263a 80%, #23263a 100%) !important;
+	color: #eaf3ff !important;
 		font-size: 14px !important;
 		margin-top: 12px;
 		display: flex;
@@ -189,9 +258,7 @@ button:hover, .glowBtn:hover {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
-	padding: 0 24px;
-	position: fixed;
-	bottom: 0; left: 0; right: 0; z-index: 12000;
+	display: none;
 }
 
 /* Custom scrollbar to match the theme */
@@ -287,17 +354,14 @@ img#logoSmall{width:40px;height:40px;border-radius:8px}
 main{display:grid;grid-template-columns:320px 1fr;gap:18px;margin-top:18px;height:100%;overflow:hidden}
 
 #listPane{background:#fff;padding:14px;border-radius:12px;box-shadow:0 6px 18px rgba(11,91,215,0.06);overflow:auto}
-/* Preview area: center the form and make it responsive to the window size
-	Keep a sensible max-width for readable pages and allow vertical scrolling
-	inside the preview so forms do not get clipped horizontally. */
-#previewPane{background:#fff;padding:14px;border-radius:12px;box-shadow:0 6px 18px rgba(11,91,215,0.04);display:flex;justify-content:center;align-items:flex-start;overflow:hidden}
-/* preview should fill available height and manage its own scrolling */
-#rnPreview{width:100%;max-width:1100px;height:100%;max-height:100%;overflow:auto;margin:0 auto;padding:12px;box-sizing:border-box;display:flex;justify-content:center;align-items:flex-start}
-#previewPane iframe#previewFrame{max-width:1100px;width:100%;height:100%;border:none;background:transparent}
+/* Display container: center the form/cards and make responsive */
+#displayContainer{background:#fff;padding:14px;border-radius:12px;box-shadow:0 6px 18px rgba(11,91,215,0.04);display:flex;flex-direction:column;justify-content:flex-start;align-items:stretch;overflow:visible}
+/* content mount used by the RN renderer */
+/* Mount area: use the display container as the single mount host */
+#displayContainer{width:100%;max-width:1100px;height:100%;max-height:100%;overflow:auto;margin:0 auto;padding:12px;box-sizing:border-box;display:flex;justify-content:center;align-items:flex-start}
 
-/* Aggressively hide any stray borders/lines inside the preview area */
-#previewPane, #previewPane * { border: none !important; box-shadow: none !important; outline: none !important; }
-#previewPane iframe { background: transparent !important; }
+/* Aggressively hide any stray borders/lines inside the display area */
+#displayContainer, #displayContainer * { border: none !important; box-shadow: none !important; outline: none !important; }
 /* Sidebar: vertical scrollable column for year cards */
 #yearSidebar{
 	display: flex;
@@ -374,13 +438,28 @@ main{display:grid;grid-template-columns:320px 1fr;gap:18px;margin-top:18px;heigh
 @media (max-width:900px){main{grid-template-columns:1fr}}
 
 /* Top statistics row */
-.statsRow{display:flex;gap:18px;align-items:stretch;padding:22px 28px 0 28px;max-width:1200px;margin:0 auto 8px}
+#statsRow{display:flex;gap:10px;align-items:stretch;padding:6px 8px 0 8px;max-width:1200px;margin:0 auto 8px;justify-content:center;position:absolute;top:0;left:50%;transform:translateX(-50%);z-index:9999;width:calc(100% - 24px);max-width:1200px}
+.statsRow{display:flex;flex-direction:row;flex-wrap:nowrap;gap:16px;align-items:stretch;justify-content:center;width:calc(100% - 32px);max-width:1200px;margin:0 auto;padding:6px 12px;box-sizing:border-box;position:absolute;top:6px;left:50%;transform:translateX(-50%);z-index:99999}
+.statsRow .statCard{min-width:180px;max-width:360px;flex:0 1 260px}
 .statCard{flex:1;min-width:180px;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.04));border:1px solid rgba(255,255,255,0.03);border-radius:16px;padding:18px;display:flex;flex-direction:column;justify-content:space-between;box-shadow: inset 0 1px 0 rgba(255,255,255,0.02), 0 12px 36px rgba(2,6,23,0.24)}
 .statValue{font-size:28px;font-weight:900;color:var(--text-main);text-shadow:0 8px 36px rgba(30,167,255,0.06)}
 .statLabel{font-size:13px;color:var(--text-muted);margin-top:6px}
 .connectCard{display:flex;flex-direction:column;gap:12px;align-items:flex-start}
 .connectCard .hint{font-size:12px;color:var(--text-muted)}
 .statSmall{font-size:14px;color:var(--text-muted)}
+
+/* Connected state for the Dropbox connect card */
+.connectCard.connected{border-color:var(--accent-blue) !important;box-shadow:0 12px 48px rgba(30,167,255,0.12) !important;transform:translateY(-4px)}
+.connectCard.connected::before{content:'';position:absolute;left:8px;top:8px;width:6px;height:6px;border-radius:50%;background:linear-gradient(90deg,var(--accent-blue),var(--accent-purple));box-shadow:0 0 18px rgba(30,167,255,0.28)}
+.connectCard.connected .glowBtn{box-shadow:0 12px 40px rgba(30,167,255,0.18) !important;background:linear-gradient(90deg,#1ea7ff,#6f5cff) !important}
+.connectCard.connected .statValue{color:#fff}
+
+@keyframes pulseGlow {
+	0% { box-shadow: 0 6px 18px rgba(30,167,255,0.08); }
+	50% { box-shadow: 0 18px 48px rgba(30,167,255,0.16); }
+	100% { box-shadow: 0 6px 18px rgba(30,167,255,0.08); }
+}
+.connectCard.connected{animation: pulseGlow 3s ease-in-out infinite}
 
 /* decorative inner glow at card bottom */
 .yearCard.center::after, .statCard::after{content:'';position:absolute;left:12px;right:12px;bottom:12px;height:6px;border-radius:6px;background:linear-gradient(90deg,var(--accent-purple),var(--accent-blue));opacity:0.08;pointer-events:none}
@@ -408,6 +487,10 @@ main{display:grid;grid-template-columns:320px 1fr;gap:18px;margin-top:18px;heigh
 /* small helpers */
 .placeholder{color:#94a3b8}
 
+/* test disconnect button styling (subtle) */
+#forceDisconnectDropboxBtn{opacity:0.9;background:linear-gradient(90deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01));border:1px solid rgba(255,255,255,0.04);}
+@media (max-width:900px){#forceDisconnectDropboxBtn{left:8px;bottom:72px}}
+
 @media (max-width:900px){main{grid-template-columns:1fr;}}
 
 .previewFull main{grid-template-columns:320px 1fr}
@@ -418,8 +501,8 @@ main{display:grid;grid-template-columns:320px 1fr;gap:18px;margin-top:18px;heigh
 /* keep the listPane in the DOM but visually collapse it to avoid reflow detach of children */
 .sidebarHidden #listPane{width:0;padding:0;visibility:hidden;overflow:hidden}
 .sidebarHidden #yearRow{display:none}
-.sidebarHidden #rnPreview{max-width:1400px;width:100%;min-width:0}
-.sidebarHidden #previewPane{padding:20px}
+.sidebarHidden #displayContainer{max-width:1400px;width:100%;min-width:0}
+.sidebarHidden #displayContainer{padding:20px}
 
 /* Controls bar beneath the titlebar */
 .controlsBar{display:flex;justify-content:center;padding:12px 18px;background:transparent}
@@ -457,7 +540,7 @@ body.dropbox-active .topbar{background:linear-gradient(90deg,#0b74ff33,#6dd3ff22
 body.dropbox-active .controls-visible{background:linear-gradient(90deg,#f8fbff,#eef8ff);box-shadow:0 18px 60px rgba(11,91,215,0.08);border-color:transparent}
 body.dropbox-active .controls-visible button{box-shadow:0 10px 30px rgba(11,91,215,0.12);transition:transform 160ms ease,box-shadow 200ms ease}
 body.dropbox-active .controls-visible button:hover{transform:translateY(-3px);box-shadow:0 18px 48px rgba(11,91,215,0.16)}
-body.dropbox-active #previewPane{box-shadow:0 20px 80px rgba(11,91,215,0.06);border-radius:14px}
+body.dropbox-active #displayContainer{box-shadow:0 20px 80px rgba(11,91,215,0.06);border-radius:14px}
 body.dropbox-active #watermark{opacity:0.12;filter:grayscale(0%) saturate(1.15) contrast(1.02)}
 
 /* Small animated gradient accent behind the app when connected */
@@ -467,7 +550,7 @@ body.dropbox-active::before{content:'';position:fixed;left:50%;top:8vh;transform
 body.app-loaded .app-footer{display:flex}
 
 /* Slight transition for major UI pieces when toggling state */
-.topbar,.controls-visible,#previewPane,#rnPreview{transition:all 320ms cubic-bezier(.2,.9,.2,1)}
+.topbar,.controls-visible,#displayContainer{transition:all 320ms cubic-bezier(.2,.9,.2,1)}
 
 /* Search results list tweaks */
 .search-hit{padding:10px;border-radius:10px;border:1px solid #eef4ff;background:#fff;margin-bottom:8px;cursor:pointer}
@@ -500,10 +583,10 @@ button.loading{position:relative}
 button.loading::after{content:'';position:absolute;right:10px;top:50%;transform:translateY(-50%);width:14px;height:14px;border:2px solid rgba(255,255,255,0.6);border-top-color:#fff;border-radius:50%;animation:spin 0.9s linear infinite}
 
 /* watermark centered in the preview area */
-#previewPane{position:relative}
+#displayContainer{position:relative}
 #watermark{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);opacity:0.14;background-image:url('../assets/logo.jpeg');background-size:contain;background-repeat:no-repeat;background-position:center;width:70vmin;height:70vmin;pointer-events:none;z-index:2;filter:grayscale(100%) contrast(1.05) brightness(0.92)}
-/* ensure preview content sits above watermark */
-#previewPane > *{position:relative;z-index:3}
+/* ensure display content sits above watermark */
+#displayContainer > *{position:relative;z-index:3}
 
 /* Global full-screen iPhone-like spinner overlay */
 .global-spinner-overlay{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:40000;background:rgba(9,10,12,0.12);-webkit-backdrop-filter: blur(2px);backdrop-filter: blur(2px)}
@@ -514,7 +597,7 @@ button.loading::after{content:'';position:absolute;right:10px;top:50%;transform:
 .global-spinner-overlay.show{display:flex}
 
 /* Compact adjustments so preview aligns under controls */
-#previewPane{padding-top:22px}
+#displayContainer{padding-top:0}
 
 /* When restores are complete, hide restore buttons across the UI */
 .restoresHidden .restore-btn{display:none !important}

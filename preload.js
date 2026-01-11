@@ -18,6 +18,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       restoreYear: (year, month) => ipcRenderer.invoke('drive-restore-year', year, month),
       getLocalHistory: () => ipcRenderer.invoke('drive-local-history'),
       deleteLocalForm: (filePath) => ipcRenderer.invoke('delete-local-form', filePath),
+        onSignedIn: (cb) => { ipcRenderer.on('drive-signed-in', (ev, info) => cb(info)); }
   }
   ,
   window: {

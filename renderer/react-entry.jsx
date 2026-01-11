@@ -106,9 +106,9 @@ function unmountFrom(mount) {
 
 window.rnRenderer = {
   renderForm: (payload) => {
-    const mount = document.getElementById('rnPreview');
+    const mount = document.getElementById('displayContainer');
     if (!mount) {
-      console.warn('rnPreview mount element not found');
+      console.warn('displayContainer mount element not found');
       return;
     }
     renderInto(mount, payload);
