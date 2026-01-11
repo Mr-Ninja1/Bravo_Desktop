@@ -128,6 +128,8 @@ try {
 
 let currentMsgIndex = 0;
 let splashAnimationTimer = null;
+// startup spinner timeout handle (used when splash is disabled)
+let _startupSpinnerTimeout = null;
 
 // Global spinner reference & refcount for overlapping async tasks
 let __spinnerCount = 0;
@@ -227,7 +229,16 @@ function animateSplashMessage() {
 try { if (window && window.electronAPI) { try { localStorage.setItem('disableSplash', '1'); } catch (e) {} } } catch (e) {}
 const disableSplash = (() => { try { return localStorage.getItem('disableSplash') === '1'; } catch (e) { return false; } })();
 if (disableSplash) {
-  try { splash.style.display = 'none'; main.style.display = 'block'; document.body.classList.add('app-loaded'); } catch (e) {}
+  try {
+    splash.style.display = 'none';
+    main.style.display = 'block';
+    document.body.classList.add('app-loaded');
+    // Show a lightweight global spinner when desktop splash is disabled so the
+    // UI never appears completely dead while async initialization runs.
+    try { showSpinner('Starting app...'); } catch (e) {}
+    // Safety: ensure the spinner is removed after a reasonable timeout
+    try { _startupSpinnerTimeout = setTimeout(() => { try { hideSpinner(true); } catch (e) {} }, 15000); } catch (e) {}
+  } catch (e) {}
 } else {
   setTimeout(() => animateSplashMessage(), 1000);
 }
@@ -401,12 +412,22 @@ function renderYearCards(entries) {
   const years = Object.keys(yearMap).sort((a, b) => Number(b) - Number(a));
   const localList = document.getElementById('localList');
   if (!localList) return;
-  // Remove all year cards and placeholders and add a persistent sidebar heading
+  // Remove all year cards and placeholders
   localList.innerHTML = '';
-  const heading = document.createElement('div');
-  heading.className = 'sidebarHeading';
-  heading.innerText = 'Your Dropbox forms';
-  localList.appendChild(heading);
+  // Ensure only one persistent sidebar heading exists (avoid duplicates)
+  try {
+    Array.from(document.querySelectorAll('.sidebarHeadingFixed, .sidebarHeading')).forEach(n => { try { n.parentNode && n.parentNode.removeChild(n); } catch (e) {} });
+  } catch (e) {}
+  // Create a sticky header that does not scroll with year cards
+  try {
+    const sidebar = document.getElementById('yearSidebar') || localList.parentNode;
+    const heading = document.createElement('div');
+    heading.className = 'sidebarHeading sidebarHeadingFixed';
+    heading.id = 'sidebarHeadingFixed';
+    heading.innerText = 'Your Dropbox forms';
+    if (sidebar && sidebar.insertBefore) sidebar.insertBefore(heading, localList);
+    else localList.insertBefore(heading, localList.firstChild);
+  } catch (e) { /* ignore header creation failures */ }
   if (!years.length) {
     // no year cards yet — keep the heading visible but don't show the old error text
     return;
@@ -458,11 +479,11 @@ function renderYearCards(entries) {
   try {
     const sidebar = document.getElementById('yearSidebar');
     if (sidebar) {
-      try { sidebar.style.paddingBottom = sidebar.style.paddingBottom || '28px'; } catch (e) {}
+      try { sidebar.style.paddingBottom = sidebar.style.paddingBottom || '96px'; } catch (e) {}
       try { sidebar.style.scrollPaddingBottom = sidebar.style.scrollPaddingBottom || '28px'; } catch (e) {}
     }
     if (wrapper) {
-      try { wrapper.style.paddingBottom = wrapper.style.paddingBottom || '32px'; } catch (e) {}
+      try { wrapper.style.paddingBottom = wrapper.style.paddingBottom || '96px'; } catch (e) {}
     }
   } catch (e) {}
 }
@@ -483,10 +504,12 @@ function renderStatsCards(entries) {
     const fileEntries = (entries || []).filter(e => e && (e.raw && (e.raw['.tag'] === 'file') || e['.tag'] === 'file' || (e.raw && e.raw['.tag'] === 'file')));
     const total = document.createElement('div');
     total.className = 'statCard';
+    // Header indicating these are the user's Dropbox forms
+    const totalHeader = document.createElement('div'); totalHeader.className = 'statHeader'; totalHeader.innerText = 'Your forms in Dropbox';
     const totalVal = document.createElement('div'); totalVal.className = 'statValue';
     totalVal.innerText = (fileEntries && fileEntries.length) ? String(fileEntries.length) : '0';
-    const totalLabel = document.createElement('div'); totalLabel.className = 'statLabel'; totalLabel.innerText = 'Total forms in Dropbox';
-    total.appendChild(totalVal); total.appendChild(totalLabel);
+    const totalLabel = document.createElement('div'); totalLabel.className = 'statLabel'; totalLabel.innerText = 'Total forms';
+    total.appendChild(totalHeader); total.appendChild(totalVal); total.appendChild(totalLabel);
 
     const today = document.createElement('div');
     today.className = 'statCard';
@@ -529,8 +552,14 @@ function renderStatsCards(entries) {
     const connHint = document.createElement('div'); connHint.className = 'hint'; connHint.innerText = document.body.classList.contains('dropbox-active') ? 'Account connected' : 'Connect to sync and download forms';
     const connBtn = document.createElement('button'); connBtn.className = 'glowBtn'; connBtn.style.alignSelf = 'stretch'; connBtn.innerText = document.body.classList.contains('dropbox-active') ? 'Manage Connection' : 'Connect';
     try { if (document.body.classList.contains('dropbox-active')) connect.classList.add('connected'); else connect.classList.remove('connected'); } catch (e) {}
-    connBtn.addEventListener('click', async () => {
+    connBtn.addEventListener('click', async (ev) => {
       try {
+        ev && ev.stopPropagation && ev.stopPropagation();
+        // If already connected, surface manage options; otherwise initiate sign-in
+        if (document.body.classList.contains('dropbox-active')) {
+          try { showManageConnectionModal(); } catch (e) { console.warn('showManageConnectionModal failed', e); }
+          return;
+        }
         if (connectBtn && typeof connectBtn.click === 'function') return connectBtn.click();
         if (window.electronAPI && window.electronAPI.drive && typeof window.electronAPI.drive.signIn === 'function') {
           try { await window.electronAPI.drive.signIn(); } catch (e) {}
@@ -662,6 +691,12 @@ async function checkExistingSignIn() {
   } catch (e) {
     console.warn('renderer: failed to check existing sign-in', e);
     try { setConnectLoading(false); } catch (er) {}
+  } finally {
+    // Ensure any startup spinner set when splash was disabled is cleared
+    try {
+      if (_startupSpinnerTimeout) { clearTimeout(_startupSpinnerTimeout); _startupSpinnerTimeout = null; }
+    } catch (e) {}
+    try { hideSpinner(true); } catch (e) {}
   }
 }
 
@@ -1128,37 +1163,6 @@ if (downloadBtn) {
     finally { try { downloadBtn.classList.remove('loading'); } catch (e) {} downloadBtn.disabled = false; downloadBtn.innerText = 'Download Forms'; try { hideSpinner(); } catch (e) {} }
   });
 }
-
-// Dev/test helper: small subtle disconnect-all button to clear Dropbox tokens and refresh UI
-try {
-  const testBtnId = 'forceDisconnectDropboxBtn';
-  if (!document.getElementById(testBtnId)) {
-    const tb = document.createElement('button');
-    tb.id = testBtnId;
-    tb.innerText = 'Disconnect Dropbox';
-    tb.style.position = 'fixed';
-    tb.style.left = '8px';
-    tb.style.bottom = '12px';
-    tb.style.zIndex = '65000';
-    tb.style.background = 'transparent';
-    tb.style.border = '1px solid rgba(255,255,255,0.06)';
-    tb.style.color = '#fff';
-    tb.style.padding = '6px 8px';
-    tb.style.borderRadius = '8px';
-    tb.style.fontSize = '12px';
-    tb.style.cursor = 'pointer';
-    tb.title = 'Test: clear Dropbox tokens and refresh UI';
-    tb.addEventListener('click', async () => {
-      try {
-        if (window.electronAPI && window.electronAPI.drive && typeof window.electronAPI.drive.signOut === 'function') {
-          await window.electronAPI.drive.signOut();
-        }
-      } catch (e) { console.warn('test disconnect failed', e); }
-      try { updateDropboxStatus(false); } catch (e) {}
-    });
-    document.body.appendChild(tb);
-  }
-} catch (e) { console.warn('failed to add test disconnect button', e); }
 
 // Removed renderLocalHistory: local/restored forms are no longer displayed. Year cards are now rendered in #localList.
 
@@ -1775,6 +1779,51 @@ function showTodayFormsModal() {
   } catch (e) { console.warn('showTodayFormsModal failed', e); showNotification('Error', String(e), 'error'); }
 }
 
+// Show a small Manage Connection modal with actions: Refresh and Disconnect
+function showManageConnectionModal() {
+  try {
+    const overlay = document.createElement('div'); overlay.className = 'modalOverlay'; overlay.style.zIndex = 40000;
+    const box = document.createElement('div'); box.className = 'modalBox'; box.style.width = '360px'; box.style.padding = '14px'; box.style.position = 'relative';
+    const h = document.createElement('div'); h.style.fontWeight = '800'; h.style.marginBottom = '12px'; h.innerText = 'Manage Dropbox connection';
+
+    const info = document.createElement('div'); info.style.marginBottom = '12px'; info.style.color = '#475569'; info.innerText = 'Choose an action for your Dropbox connection.';
+
+    const actions = document.createElement('div'); actions.style.display = 'flex'; actions.style.flexDirection = 'column'; actions.style.gap = '8px';
+
+    const refreshBtn = document.createElement('button'); refreshBtn.className = 'glowBtn'; refreshBtn.innerText = 'Refresh connection';
+    refreshBtn.addEventListener('click', async () => {
+      try {
+        refreshBtn.disabled = true;
+        try { showSpinner('Refreshing...'); } catch (e) {}
+        try { await loadAccountAfterSignIn(); } catch (e) { console.warn('refresh: loadAccount failed', e); }
+        try { await loadDropboxFiles(); } catch (e) { console.warn('refresh: loadDropboxFiles failed', e); }
+        try { updateConnectCard(); } catch (e) {}
+      } catch (e) { console.warn('refreshBtn failed', e); }
+      finally { try { hideSpinner(); } catch (e) {} refreshBtn.disabled = false; }
+    });
+
+    const disconnectBtnModal = document.createElement('button'); disconnectBtnModal.className = 'glowBtn'; disconnectBtnModal.style.background = '#ffecec'; disconnectBtnModal.style.color = '#b91c1c'; disconnectBtnModal.innerText = 'Disconnect';
+    disconnectBtnModal.addEventListener('click', async () => {
+      try {
+        disconnectBtnModal.disabled = true;
+        if (window.electronAPI && window.electronAPI.drive && typeof window.electronAPI.drive.signOut === 'function') {
+          try { await window.electronAPI.drive.signOut(); } catch (e) { console.warn('signOut failed', e); }
+        }
+        try { updateDropboxStatus(false); } catch (e) {}
+      } catch (e) { console.warn('disconnectBtnModal failed', e); }
+      finally { try { document.body.removeChild(overlay); } catch (e) {} }
+    });
+
+    const close = document.createElement('button'); close.innerText = 'Close'; close.style.position = 'absolute'; close.style.top = '8px'; close.style.right = '10px'; close.style.background = 'transparent'; close.style.border = 'none'; close.style.cursor = 'pointer';
+    close.addEventListener('click', () => { try { document.body.removeChild(overlay); } catch (e) {} });
+
+    actions.appendChild(refreshBtn); actions.appendChild(disconnectBtnModal);
+    box.appendChild(h); box.appendChild(info); box.appendChild(actions); box.appendChild(close);
+    overlay.appendChild(box); document.body.appendChild(overlay);
+    overlay.addEventListener('click', (ev) => { if (ev.target === overlay) try { document.body.removeChild(overlay); } catch (e) {} });
+  } catch (e) { console.warn('showManageConnectionModal failed', e); }
+}
+
 // Open a remote preview via Dropbox temporary link (no persistent download)
 async function openRemotePreview(entry) {
   try {
@@ -1998,7 +2047,7 @@ function updateDropboxStatus(connected, info) {
             const localListEl = document.getElementById('localList');
             if (sidebar) {
               // ensure there's bottom padding so the last card can be scrolled fully into view
-              try { sidebar.style.paddingBottom = sidebar.style.paddingBottom || '28px'; } catch (e) {}
+              try { sidebar.style.paddingBottom = sidebar.style.paddingBottom || '96px'; } catch (e) {}
               // reset scroll to top on disconnect so UI looks refreshed
               try { sidebar.scrollTop = 0; } catch (e) {}
             }
