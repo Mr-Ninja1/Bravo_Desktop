@@ -180,35 +180,7 @@ function showNotification(title, message, type) {
 
 // (render debug button removed)
 
-// Wire sidebar toggle button placed inside the sidebar and the small left-edge hover area
-try {
-  if (sidebarToggleBtn) {
-    const updateIcon = () => {
-      try {
-        const hidden = document.body.classList.contains('sidebarHidden');
-        sidebarToggleBtn.innerText = hidden ? '›' : '✕';
-        sidebarToggleBtn.title = hidden ? 'Show sidebar' : 'Hide sidebar';
-      } catch (e) {}
-    };
-    updateIcon();
-    sidebarToggleBtn.addEventListener('click', () => {
-      try {
-        const hidden = document.body.classList.toggle('sidebarHidden');
-        updateIcon();
-      } catch (e) { console.warn('sidebarToggleBtn click failed', e); }
-    });
-  }
-  if (sidebarEdge) {
-    let leaveTimeout = null;
-    sidebarEdge.addEventListener('mouseenter', () => {
-      try { document.body.classList.remove('sidebarHidden'); if (sidebarToggleBtn) sidebarToggleBtn.innerText = '✕'; } catch (e) {}
-      if (leaveTimeout) { clearTimeout(leaveTimeout); leaveTimeout = null; }
-    });
-    sidebarEdge.addEventListener('mouseleave', () => {
-      try { leaveTimeout = setTimeout(() => { document.body.classList.add('sidebarHidden'); if (sidebarToggleBtn) sidebarToggleBtn.innerText = '›'; }, 800); } catch (e) {}
-    });
-  }
-} catch (e) {}
+// Sidebar toggle removed: sidebar always visible in desktop layout
 
 // Wire custom window controls (frameless window)
 try {
@@ -272,9 +244,54 @@ function isDropboxActive() {
   try { return document.body.classList && document.body.classList.contains('dropbox-active'); } catch (e) { return false; }
 }
 
+// Small inline loading helpers for connect card and sidebar actions
+function createInlineSpinner(text) {
+  const s = document.createElement('span');
+  s.className = 'inlineSpinner';
+  s.style.display = 'inline-flex';
+  s.style.alignItems = 'center';
+  s.style.gap = '8px';
+  s.style.fontSize = '13px';
+  s.style.color = '#94a3b8';
+  s.innerHTML = `<svg width="14" height="14" viewBox="0 0 50 50" style="animation:spin 1s linear infinite"><circle cx="25" cy="25" r="20" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-dasharray="31.4 31.4"></circle></svg><span>${text||'Loading'}</span>`;
+  return s;
+}
+
+function setConnectLoading(on, msg) {
+  try {
+    const card = document.getElementById('dropboxConnectCard');
+    if (!card) return;
+    if (on) {
+      card.classList.add('loading');
+      // add spinner if not present
+      if (!card.querySelector('.inlineSpinner')) {
+        const spinner = createInlineSpinner(msg || 'Checking');
+        const hint = card.querySelector('.hint');
+        if (hint && hint.parentNode) hint.parentNode.insertBefore(spinner, hint.nextSibling);
+      }
+      const btn = card.querySelector('button'); if (btn) btn.disabled = true;
+    } else {
+      card.classList.remove('loading');
+      const sp = card.querySelector('.inlineSpinner'); if (sp && sp.parentNode) sp.parentNode.removeChild(sp);
+      const btn = card.querySelector('button'); if (btn) btn.disabled = false;
+    }
+  } catch (e) { console.warn('setConnectLoading failed', e); }
+}
+
+// simple CSS for spinner animation injected once
+try {
+  if (!document.getElementById('inlineSpinnerStyles')) {
+    const st = document.createElement('style'); st.id = 'inlineSpinnerStyles';
+    st.innerHTML = '@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}} .inlineSpinner svg{color:rgba(148,163,184,0.9)}';
+    document.head && document.head.appendChild(st);
+  }
+} catch (e) {}
+
 async function loadDropboxFiles() {
   // keep a central loading state while we fetch the remote index
   const center = document.getElementById('displayContainer') || document.getElementById('center');
+  // show connect card loading state while we probe
+  try { setConnectLoading(true, 'Loading list...'); } catch (e) {}
   // Ensure we are connected before attempting to list Dropbox files. If not connected,
   // show a subtle placeholder prompting the user to connect and do not render remote data.
   try {
@@ -302,6 +319,7 @@ async function loadDropboxFiles() {
     currentEntries = entries;
     if (!entries.length) {
       if (center) center.innerHTML = '<div class="placeholder">No files found in Dropbox.</div>';
+      try { setConnectLoading(false); } catch (e) {}
       return;
     }
     // Render modern stat cards in preview space
@@ -310,9 +328,11 @@ async function loadDropboxFiles() {
     renderYearCards(entries);
     // Align stats row vertically with the first year card
     try { setTimeout(alignStatsRow, 40); } catch (e) {}
+    try { setConnectLoading(false); } catch (e) {}
   } catch (err) {
     console.error(err);
     if (center) center.innerHTML = '<div class="placeholder">Error loading files.</div>';
+    try { setConnectLoading(false); } catch (e) {}
   }
 }
 
@@ -381,10 +401,14 @@ function renderYearCards(entries) {
   const years = Object.keys(yearMap).sort((a, b) => Number(b) - Number(a));
   const localList = document.getElementById('localList');
   if (!localList) return;
-  // Remove all year cards and placeholders
+  // Remove all year cards and placeholders and add a persistent sidebar heading
   localList.innerHTML = '';
+  const heading = document.createElement('div');
+  heading.className = 'sidebarHeading';
+  heading.innerText = 'Your Dropbox forms';
+  localList.appendChild(heading);
   if (!years.length) {
-    localList.innerHTML = '<div class="placeholder">No years found in Dropbox.</div>';
+    // no year cards yet — keep the heading visible but don't show the old error text
     return;
   }
 
@@ -399,6 +423,8 @@ function renderYearCards(entries) {
 
     const card = document.createElement('div');
     card.className = 'yearCard center';
+    card.style.cursor = 'pointer';
+    card.addEventListener('click', () => { try { showYearFormsModal(year); } catch (e) { console.warn('year card click failed', e); } });
 
     const badge = document.createElement('div');
     badge.className = 'statusBadge';
@@ -428,6 +454,17 @@ function renderYearCards(entries) {
     card.appendChild(actions);
     wrapper.appendChild(card);
   });
+  // Ensure sidebar has bottom padding so the last card can be scrolled fully into view
+  try {
+    const sidebar = document.getElementById('yearSidebar');
+    if (sidebar) {
+      try { sidebar.style.paddingBottom = sidebar.style.paddingBottom || '28px'; } catch (e) {}
+      try { sidebar.style.scrollPaddingBottom = sidebar.style.scrollPaddingBottom || '28px'; } catch (e) {}
+    }
+    if (wrapper) {
+      try { wrapper.style.paddingBottom = wrapper.style.paddingBottom || '32px'; } catch (e) {}
+    }
+  } catch (e) {}
 }
 
 // Render top-level stats: total forms and forms today
@@ -453,6 +490,14 @@ function renderStatsCards(entries) {
 
     const today = document.createElement('div');
     today.className = 'statCard';
+    // Header for clarity: "Forms saved today"
+    const todayHeader = document.createElement('div');
+    todayHeader.className = 'statHeader';
+    todayHeader.style.fontSize = '12px';
+    todayHeader.style.color = 'var(--text-muted)';
+    todayHeader.style.fontWeight = '700';
+    todayHeader.style.marginBottom = '8px';
+    todayHeader.innerText = 'Forms saved today';
     const todayVal = document.createElement('div'); todayVal.className = 'statValue';
     const todayCount = (fileEntries || []).reduce((acc, e) => {
       try {
@@ -464,8 +509,18 @@ function renderStatsCards(entries) {
       return acc;
     }, 0);
     todayVal.innerText = String(todayCount);
-    const todayLabel = document.createElement('div'); todayLabel.className = 'statLabel'; todayLabel.innerText = "Forms saved today";
-    today.appendChild(todayVal); today.appendChild(todayLabel);
+    // Action button to make interactivity discoverable
+    const todayActions = document.createElement('div'); todayActions.style.marginTop = '12px';
+    const openTodayBtn = document.createElement('button'); openTodayBtn.className = 'glowBtn'; openTodayBtn.innerText = 'Open';
+    openTodayBtn.addEventListener('click', (ev) => { try { ev.stopPropagation(); showTodayFormsModal(); } catch (e) { console.warn('openTodayBtn failed', e); } });
+    todayActions.appendChild(openTodayBtn);
+    // Compose today card
+    today.appendChild(todayHeader);
+    today.appendChild(todayVal);
+    today.appendChild(todayActions);
+    // Make the whole card clickable as well
+    try { today.style.cursor = 'pointer'; } catch (e) {}
+    try { today.addEventListener('click', () => { try { showTodayFormsModal(); } catch (e) { console.warn('showTodayFormsModal failed', e); } }); } catch (e) {}
 
     const connect = document.createElement('div');
     connect.className = 'statCard connectCard';
@@ -582,6 +637,7 @@ function showYearDetails(year, months) {
 // UI state
 async function checkExistingSignIn() {
   try {
+    try { setConnectLoading(true, 'Checking sign-in...'); } catch (e) {}
     const dbg = await window.electronAPI.drive.getDebug();
     if (dbg && dbg.ok && dbg.info && dbg.info.hasRefreshToken) {
       console.debug && console.debug('renderer: checkExistingSignIn - refresh token present');
@@ -594,20 +650,25 @@ async function checkExistingSignIn() {
       } catch (e) { console.warn('failed to get account', e); }
       await loadDropboxFiles();
       try { updateDropboxStatus(true); } catch (e) {}
+      try { setConnectLoading(false); } catch (e) {}
     }
     else {
       // Not signed in: ensure the connect card is visible so user can initiate sign-in
       try { updateDropboxStatus(false); } catch (e) {}
       try { renderStatsCards([]); } catch (e) {}
       try { renderYearCards([]); } catch (e) {}
+      try { setConnectLoading(false); } catch (e) {}
     }
   } catch (e) {
     console.warn('renderer: failed to check existing sign-in', e);
+    try { setConnectLoading(false); } catch (er) {}
   }
 }
 
 // run initial check
 setTimeout(() => { checkExistingSignIn(); }, 600);
+// show disconnected sidebar quickly on app load so Connect is visible immediately
+try { renderYearCards([]); } catch (e) {}
 // load local history immediately as well
 setTimeout(() => { try { loadLocalHistory(); } catch (e) { console.warn('initial local history load failed', e); } }, 900);
 
@@ -665,9 +726,15 @@ let siteFilter = null;
 // Load local history (restored/imported forms) and render in the UI
 async function loadLocalHistory() {
   try {
+    const localList = document.getElementById('localList');
+    // show a lightweight placeholder immediately so UI doesn't block
+    try { if (localList) localList.innerHTML = '<div class="placeholder">Loading local history...</div>'; } catch (e) {}
+    // Defer heavy parsing to the next tick so the DOM update can render
+    await new Promise(r => setTimeout(r, 10));
     const res = await window.electronAPI.drive.getLocalHistory();
     if (!res || !res.ok) {
-      document.getElementById('localList').innerHTML = '<div class="placeholder">Failed to read local history.</div>';
+      // don't render error text in the sidebar; leave it empty to avoid clutter
+      if (localList) localList.innerHTML = '';
       return;
     }
     const list = res.list || [];
@@ -677,7 +744,7 @@ async function loadLocalHistory() {
     renderLocalHistory(list);
   } catch (e) {
     console.error('loadLocalHistory failed', e);
-    document.getElementById('localList').innerHTML = '<div class="placeholder">Error loading local history.</div>';
+    const localList = document.getElementById('localList'); if (localList) localList.innerHTML = '';
   }
 }
 
@@ -1499,10 +1566,10 @@ function showYearFormsModal(year) {
       groupKeys.forEach(dateKey => {
         const heading = document.createElement('div'); heading.className = 'dateHeading'; heading.innerText = dateKey; listWrapper.appendChild(heading);
         groups[dateKey].sort((a,b) => new Date(b.server_modified) - new Date(a.server_modified)).forEach(ent => {
-          const row = document.createElement('div'); row.style.display = 'flex'; row.style.justifyContent = 'space-between'; row.style.alignItems = 'center'; row.style.padding = '8px'; row.style.borderRadius = '8px'; row.style.background = '#f8fafc';
+          const row = document.createElement('div'); row.className = 'fileItem';
           const left = document.createElement('div'); left.style.display = 'flex'; left.style.flexDirection = 'column';
-          const name = document.createElement('div'); name.innerText = (ent && ent.name) ? ent.name : getFriendlyTitle(ent); name.style.fontWeight = '600';
-          const meta = document.createElement('div'); meta.innerText = ent.server_modified ? new Date(ent.server_modified).toLocaleTimeString() : ''; meta.style.color = '#475569'; meta.style.fontSize = '12px';
+          const name = document.createElement('div'); name.className = 'fileName'; name.innerText = (ent && ent.name) ? ent.name : getFriendlyTitle(ent);
+          const meta = document.createElement('div'); meta.className = 'meta'; meta.innerText = ent.server_modified ? new Date(ent.server_modified).toLocaleTimeString() : '';
           left.appendChild(name); left.appendChild(meta);
           const actions = document.createElement('div'); actions.style.display = 'flex'; actions.style.gap = '8px';
 
@@ -1639,6 +1706,75 @@ function showYearFormsModal(year) {
   } catch (e) { console.warn('showYearFormsModal failed', e); showNotification('Error', String(e), 'error'); }
 }
 
+// Show modal listing Dropbox forms saved today
+function showTodayFormsModal() {
+  try {
+    const now = new Date();
+    const entries = (currentEntries || []).filter(ent => {
+      try {
+        if (!ent || !ent.server_modified) return false;
+        const d = new Date(ent.server_modified);
+        return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+      } catch (e) { return false; }
+    }).sort((a,b) => new Date(b.server_modified) - new Date(a.server_modified));
+
+    const overlay = document.createElement('div'); overlay.className = 'modalOverlay'; overlay.style.zIndex = 30500;
+    const box = document.createElement('div'); box.className = 'modalBox'; box.style.maxHeight = '80vh'; box.style.overflow = 'auto'; box.style.width = '920px'; box.style.position = 'relative';
+    const h = document.createElement('div'); h.style.fontWeight = '800'; h.style.marginBottom = '8px'; h.innerText = `Dropbox forms — Today`;
+
+    const listWrapper = document.createElement('div'); listWrapper.style.display = 'flex'; listWrapper.style.flexDirection = 'column'; listWrapper.style.gap = '8px';
+
+    function renderGrouped(filtered) {
+      try {
+        listWrapper.innerHTML = '';
+        if (!filtered || !filtered.length) {
+          const p = document.createElement('div'); p.className = 'placeholder'; p.innerText = 'No forms saved today.'; listWrapper.appendChild(p); return;
+        }
+        const groups = filtered.reduce((acc, item) => {
+          try {
+            const d = item.server_modified ? new Date(item.server_modified) : new Date();
+            const key = d.toLocaleTimeString(); // group by time for today
+            if (!acc[key]) acc[key] = [];
+            acc[key].push(item);
+          } catch (e) {}
+          return acc;
+        }, {});
+        const groupKeys = Object.keys(groups).sort((a,b) => new Date(b) - new Date(a));
+        groupKeys.forEach(timeKey => {
+          groups[timeKey].forEach(ent => {
+            const row = document.createElement('div'); row.className = 'fileItem';
+            const left = document.createElement('div'); left.style.display = 'flex'; left.style.flexDirection = 'column';
+            const name = document.createElement('div'); name.className = 'fileName'; name.innerText = (ent && ent.name) ? ent.name : getFriendlyTitle(ent);
+            const meta = document.createElement('div'); meta.className = 'meta'; meta.innerText = ent.server_modified ? new Date(ent.server_modified).toLocaleTimeString() : '';
+            left.appendChild(name); left.appendChild(meta);
+            const actions = document.createElement('div'); actions.style.display = 'flex'; actions.style.gap = '8px';
+            const open = document.createElement('button'); open.innerText = 'Open';
+            open.addEventListener('click', async () => {
+              try {
+                const r = await window.electronAPI.drive.downloadToTemp(ent.path_lower, ent.name);
+                if (!r || !r.ok || !r.path) return showNotification('Open failed', (r && r.error) || 'Download failed', 'error');
+                const localEntry = { title: getFriendlyTitle(ent), meta: { filePath: r.path }, _overlayZ: 31000 };
+                try { await openEntryModal(localEntry); } catch (e) { console.warn('openEntryModal failed', e); }
+                try { await window.electronAPI.drive.deleteLocalForm(r.path); } catch (e) {}
+              } catch (e) { console.warn('Open action failed', e); showNotification('Open failed', String(e), 'error'); }
+            });
+            actions.appendChild(open);
+            row.appendChild(left); row.appendChild(actions); listWrapper.appendChild(row);
+          });
+        });
+      } catch (e) { console.warn('renderGrouped (today) failed', e); }
+    }
+
+    box.appendChild(h); box.appendChild(listWrapper); renderGrouped(entries);
+    const close = document.createElement('button'); close.innerText = 'Close';
+    try { close.style.position = 'absolute'; close.style.top = '10px'; close.style.right = '12px'; close.style.zIndex = '30100'; close.style.background = '#ffecec'; close.style.color = '#b91c1c'; close.style.border = '1px solid #f5c6c6'; close.style.padding = '8px 10px'; close.style.borderRadius = '8px'; close.style.cursor = 'pointer'; } catch (e) {}
+    close.addEventListener('click', (ev) => { ev.stopPropagation(); try { document.body.removeChild(overlay); } catch (e) {} });
+    box.appendChild(close);
+    overlay.appendChild(box); document.body.appendChild(overlay);
+    overlay.addEventListener('click', (ev) => { if (ev.target === overlay) try { document.body.removeChild(overlay); } catch (e) {} });
+  } catch (e) { console.warn('showTodayFormsModal failed', e); showNotification('Error', String(e), 'error'); }
+}
+
 // Open a remote preview via Dropbox temporary link (no persistent download)
 async function openRemotePreview(entry) {
   try {
@@ -1688,17 +1824,23 @@ if (disconnectBtn) {
   disconnectBtn.addEventListener('click', async () => {
     try {
       disconnectBtn.disabled = true;
-      const res = await window.electronAPI.drive.signOut();
-      if (!res || !res.ok) showNotification('Disconnect failed', (res && res.error) || 'unknown', 'error');
-      else {
-        // clear UI
-        connectBtn.innerText = 'Connect Dropbox';
-        document.getElementById('userInfo').style.display = 'none';
-        disconnectBtn.style.display = 'none';
-        const center = document.getElementById('displayContainer') || document.getElementById('center');
-        if (center) center.innerHTML = '<div id="noYearsPlaceholder" class="placeholder">No years found in Dropbox.</div>';
-        updateDropboxStatus(false);
-      }
+      console.debug && console.debug('disconnect: initiating signOut');
+      // Fire-and-forget signOut so UI updates immediately and won't hang if main IPC is slow
+      try {
+        const p = window.electronAPI.drive.signOut();
+        if (p && typeof p.then === 'function') {
+          p.then(res => { if (!res || !res.ok) console.warn('signOut result:', res); }).catch(err => console.warn('signOut error', err));
+        }
+      } catch (e) { console.warn('disconnect: signOut invocation failed', e); }
+
+      // Immediately update UI to disconnected state to avoid perceived freeze
+      try {
+        if (connectBtn) connectBtn.innerText = 'Connect Dropbox';
+      } catch (e) {}
+      try { const ui = document.getElementById('userInfo'); if (ui) ui.style.display = 'none'; } catch (e) {}
+      try { disconnectBtn.style.display = 'none'; } catch (e) {}
+      try { const center = document.getElementById('displayContainer') || document.getElementById('center'); if (center) center.innerHTML = ''; } catch (e) {}
+      try { updateDropboxStatus(false); } catch (e) {}
     } catch (e) { console.error(e); showNotification('Error disconnecting', String(e), 'error'); }
     finally { disconnectBtn.disabled = false; }
   });
@@ -1833,10 +1975,13 @@ function updateDropboxStatus(connected, info) {
       try { updateConnectCard(); } catch (e) {}
       // Ensure sidebar placeholder is removed and year cards are rendered when connected
       try {
-        const localList = document.getElementById('localList');
-        if (localList) {
-          try { if (typeof renderYearCards === 'function') renderYearCards(currentEntries || []); else localList.innerHTML = ''; } catch (e) { localList.innerHTML = ''; }
-        }
+        // remove static placeholder if present
+        try { const ph = document.getElementById('sidebarConnectPlaceholder'); if (ph && ph.parentNode) ph.parentNode.removeChild(ph); } catch (e) {}
+        // render stats and year cards immediately (allow UI to paint)
+        try { renderStatsCards(currentEntries || []); } catch (e) {}
+        try { if (typeof renderYearCards === 'function') renderYearCards(currentEntries || []); else { const localList = document.getElementById('localList'); if (localList) localList.innerHTML = ''; } } catch (e) { const localList = document.getElementById('localList'); if (localList) localList.innerHTML = ''; }
+        // schedule alignment on next frame
+        try { requestAnimationFrame(() => { try { alignStatsRow(); } catch (e) {} }); } catch (e) { try { setTimeout(alignStatsRow, 40); } catch (er) {} }
       } catch (e) {}
     } else {
       try {
@@ -1845,6 +1990,25 @@ function updateDropboxStatus(connected, info) {
           const center = document.getElementById('displayContainer') || document.getElementById('center');
           if (center) center.innerHTML = '<div class="placeholder">Not connected to Dropbox.</div>';
           try { if (typeof renderYearCards === 'function') renderYearCards([]); } catch (e) {}
+          // also clear stats row immediately so UI reflects disconnected state without reload
+          try { renderStatsCards([]); } catch (e) {}
+          // Ensure sidebar reflows and allow scrolling to show last card fully
+          try {
+            const sidebar = document.getElementById('yearSidebar');
+            const localListEl = document.getElementById('localList');
+            if (sidebar) {
+              // ensure there's bottom padding so the last card can be scrolled fully into view
+              try { sidebar.style.paddingBottom = sidebar.style.paddingBottom || '28px'; } catch (e) {}
+              // reset scroll to top on disconnect so UI looks refreshed
+              try { sidebar.scrollTop = 0; } catch (e) {}
+            }
+            if (localListEl) {
+              // force a tiny reflow to ensure the DOM updates are painted
+              try { localListEl.style.display = 'none'; } catch (e) {}
+              try { void localListEl.offsetHeight; } catch (e) {}
+              try { localListEl.style.display = ''; } catch (e) {}
+            }
+          } catch (e) {}
       } catch (e) {}
       // remove any legacy status text elements
       try { Array.from(document.querySelectorAll('#dropboxStatus')).forEach(n => { try { n.remove(); } catch (e) {} }); } catch (e) {}
@@ -1884,6 +2048,8 @@ function updateDropboxStatus(connected, info) {
 
 // initial status check
 try { if (window && window.electronAPI && typeof window.electronAPI.drive.getAccount === 'function') { window.electronAPI.drive.getAccount().then(r => { if (r && r.ok && r.info) showAccount(r.info); else updateDropboxStatus(false); }).catch(() => updateDropboxStatus(false)); } } catch (e) { updateDropboxStatus(false); }
+
+// Static sidebar quick-connect removed; sidebar connect is handled by the main connect UI.
 
 // Updates: show a small banner when an update is downloaded
 function showUpdateBanner(info) {

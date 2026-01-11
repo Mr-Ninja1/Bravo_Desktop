@@ -19,7 +19,7 @@ const getLogoDataUri = (p) => {
   const candidates = [
     path.join(process.cwd(), 'renderer', 'assets', 'logo.jpeg'),
     path.join(process.cwd(), 'assets', 'logo.jpeg'),
-    path.join(process.cwd(), 'assets', 'logo.png')
+    path.join(process.cwd(), 'assets', 'logo.jpeg')
   ];
   for (const c of candidates) {
     try { if (fs.existsSync(c)) { const b = fs.readFileSync(c); const mime = path.extname(c).toLowerCase() === '.png' ? 'image/png' : 'image/jpeg'; return `data:${mime};base64,${b.toString('base64')}`; } } catch (e) {}

@@ -53,7 +53,7 @@ module.exports = function generate(payloadWrapper) {
     try {
       const fs = require('fs');
       const path = require('path');
-      const possible = ['logo.png','logo.jpg','logo.jpeg','logo.webp'];
+      const possible = ['logo.jpeg','logo.jpg','logo.jpeg','logo.webp'];
       for (const name of possible) {
         const pth = path.join(process.cwd(), 'assets', name);
         if (fs.existsSync(pth)) {

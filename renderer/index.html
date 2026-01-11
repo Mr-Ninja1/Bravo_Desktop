@@ -84,16 +84,13 @@
 
         <main>
           <div id="yearRow" style="margin-bottom:12px;padding:8px;display:flex;gap:8px;overflow-x:auto"></div>
-          <div id="listPane">
-            <div id="yearSidebar">
-              <button id="sidebarToggleBtn" class="sidebar-toggle" title="Hide sidebar">✕</button>
-              <!-- Year cards will be rendered here dynamically -->
-              <div id="noYearsPlaceholder" class="placeholder">No years found in Dropbox.</div>
-            </div>
-            <div id="sidebarEdge" class="sidebar-edge" title="Open sidebar"></div>
-            <div id="localList">
-              <!-- Restored/local forms will be rendered here as cards grouped by date -->
-            </div>
+          <div id="yearSidebar">
+              <!-- Sidebar heading + Year cards and local list will be rendered here dynamically -->
+              <div id="sidebarHeader" class="sidebarHeading">Your Dropbox forms</div>
+              <!-- Year cards and local list will be rendered here dynamically -->
+              <div id="localList" style="margin-top:12px">
+                <!-- Restored/local forms will be rendered here as cards grouped by date -->
+              </div>
           </div>
             <div id="displayContainer">
             <div id="watermark" aria-hidden="true"></div>

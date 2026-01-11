@@ -55,7 +55,7 @@ module.exports = function generate(payloadWrapper){
 	let logo = (p.assets && (p.assets.logoDataUri || p.assets.logo)) ? (p.assets.logoDataUri || p.assets.logo) : (p.logo || p.logoDataUri || metadata.logoUrl || metadata.companyLogo || metadata.logo || null);
 	if (!logo) {
 		try {
-			const candidates = ['logo.png','logo.jpg','logo.jpeg','logo.webp'];
+			const candidates = ['logo.jpeg','logo.jpg','logo.jpeg','logo.webp'];
 			for (const name of candidates) {
 				const pth = path.join(process.cwd(),'assets',name);
 				if (fs.existsSync(pth)) { const buf = fs.readFileSync(pth); const ext = path.extname(pth).toLowerCase().replace('.',''); const mime = ext==='png'?'image/png':'image/jpeg'; logo = `data:${mime};base64,${buf.toString('base64')}`; break; }

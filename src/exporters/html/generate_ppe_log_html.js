@@ -73,10 +73,10 @@ module.exports = function generate(payloadWrapper) {
     try {
       const fs = require('fs'); const path = require('path');
       const candidates = [
-        path.join(process.cwd(), 'assets', 'logo.png'),
+        path.join(process.cwd(), 'assets', 'logo.jpeg'),
         path.join(process.cwd(), 'assets', 'logo.jpg'),
         path.join(process.cwd(), 'assets', 'logo.jpeg'),
-        path.join(__dirname, '..', '..', 'assets', 'logo.png'),
+        path.join(__dirname, '..', '..', 'assets', 'logo.jpeg'),
         path.join(__dirname, '..', '..', 'assets', 'logo.jpeg')
       ];
       for (const pth of candidates) if (fs.existsSync(pth)) { const buf = fs.readFileSync(pth); const ext = path.extname(pth).replace('.', ''); const mime = ext === 'png' ? 'image/png' : 'image/jpeg'; logo = `data:${mime};base64,${buf.toString('base64')}`; break; }

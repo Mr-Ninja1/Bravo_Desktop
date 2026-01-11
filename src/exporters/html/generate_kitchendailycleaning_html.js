@@ -28,7 +28,7 @@ function resolveSignatureUri(val) {
 }
 
 function inlineFallbackLogo() {
-  const candidates = ['assets/logo.png','assets/logo.jpeg','assets/logo.jpg','assets/logo.webp'];
+  const candidates = ['assets/logo.jpeg','assets/logo.jpeg','assets/logo.jpg','assets/logo.webp'];
   for (const rel of candidates) {
     try {
       const p = path.join(process.cwd(), rel);

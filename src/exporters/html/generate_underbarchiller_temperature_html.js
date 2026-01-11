@@ -76,10 +76,10 @@ module.exports = function generate(payloadWrapper) {
       const candidates = [
         path.join(process.cwd(), 'assets', 'logo.jpeg'),
         path.join(process.cwd(), 'assets', 'logo.jpg'),
-        path.join(process.cwd(), 'assets', 'logo.png'),
+        path.join(process.cwd(), 'assets', 'logo.jpeg'),
         path.join(__dirname, '..', '..', 'assets', 'logo.jpeg'),
         path.join(__dirname, '..', '..', 'assets', 'logo.jpg'),
-        path.join(__dirname, '..', '..', 'assets', 'logo.png')
+        path.join(__dirname, '..', '..', 'assets', 'logo.jpeg')
       ];
       for (const pth of candidates) {
         try {
