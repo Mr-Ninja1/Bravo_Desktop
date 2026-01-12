@@ -21,7 +21,7 @@ let disconnectBtn = null;
 
 // --- Simple local trial / product-key gating
 const LICENSE_KEY = 'bravo_license_v1';
-const TRIAL_DAYS = 7; // configurable trial length
+const TRIAL_DAYS = 0; // configurable trial length
 // URL to a public JSON file listing issued keys. Set to your repo raw URL.
 const KEYS_JSON_URL = 'https://raw.githubusercontent.com/Mr-Ninja1/Bravo_Desktop/main/keys.json';
 
@@ -684,8 +684,11 @@ function hideSpinner(force) {
 // Simple notification modal (replaces alert)
 function showNotification(title, message, type) {
   try {
-    const overlay = document.createElement('div'); overlay.className = 'modalOverlay'; overlay.style.zIndex = '999999';
+    const overlay = document.createElement('div'); overlay.className = 'modalOverlay';
+    // ensure notifications appear above decorative layers (SVG traces, etc.)
+    overlay.style.zIndex = '1000001';
     const box = document.createElement('div'); box.className = 'modalBox';
+    try { box.style.zIndex = '1000002'; box.style.position = 'relative'; } catch (e) {}
     const h = document.createElement('div'); h.style.fontWeight = '800'; h.style.marginBottom = '8px'; h.innerText = title || '';
     const p = document.createElement('div'); p.innerText = message || '';
     const actions = document.createElement('div'); actions.className = 'modalActions';
@@ -876,11 +879,170 @@ function injectCyberTraces() {
 }
 
 try { injectCyberTraces(); } catch (e) {}
+// Welcome / tutorial overlay (high level interactive pointers)
+function showWelcomeTutorial() {
+  try {
+    if (localStorage.getItem('bravo_seen_tour_v1')) return;
+    const steps = [
+      { sel: '#totalFormsCard', title: 'Total Forms', text: 'Total number of forms found in your Dropbox.' },
+      { sel: '#todayFormsCard', title: "Today's Forms", text: ' access to All forms saved today and share/export them all at once.' },
+      { sel: '#dropboxConnectCard', title: 'Connect', text: 'Connect or manage your Dropbox account here.' },
+      { sel: '.userCard', title: 'Account', text: 'Shows who is signed in to Dropbox and account info.' },
+      { sel: '.storageCard', title: 'Storage', text: 'Shows your Dropbox storage space usage and tells you when dropbox is full' },
+      { sel: '.statsRowExtra .small.securityCard, .securityCard', title: 'App lock', text: 'Add or manage an app-lock password to protect the app.' },
+      { sel: '#localList', title: 'Years', text: 'Browse all your forms by year from the sidebar click to open/export/share forms.' }
+    ];
+
+    // use an SVG overlay mask so everything is dimmed except the highlighted target
+    const svgNS = 'http://www.w3.org/2000/svg';
+    const svgOverlay = document.createElementNS(svgNS, 'svg');
+    svgOverlay.setAttribute('id', 'bravoTourOverlay');
+    svgOverlay.setAttribute('width', '100%'); svgOverlay.setAttribute('height', '100%');
+    svgOverlay.style.position = 'fixed'; svgOverlay.style.left = '0'; svgOverlay.style.top = '0'; svgOverlay.style.zIndex = '90000'; svgOverlay.style.pointerEvents = 'auto';
+
+    const defs = document.createElementNS(svgNS, 'defs');
+    const mask = document.createElementNS(svgNS, 'mask'); mask.setAttribute('id', 'tourMask');
+    const fullRect = document.createElementNS(svgNS, 'rect'); fullRect.setAttribute('x', '0'); fullRect.setAttribute('y', '0'); fullRect.setAttribute('width', '100%'); fullRect.setAttribute('height', '100%'); fullRect.setAttribute('fill', 'white');
+    const holeRect = document.createElementNS(svgNS, 'rect'); holeRect.setAttribute('id', 'tourHole'); holeRect.setAttribute('x', '0'); holeRect.setAttribute('y', '0'); holeRect.setAttribute('width', '0'); holeRect.setAttribute('height', '0'); holeRect.setAttribute('fill', 'black'); holeRect.setAttribute('rx','10'); holeRect.setAttribute('ry','10');
+    mask.appendChild(fullRect); mask.appendChild(holeRect); defs.appendChild(mask);
+
+    const overlayRect = document.createElementNS(svgNS, 'rect'); overlayRect.setAttribute('x', '0'); overlayRect.setAttribute('y', '0'); overlayRect.setAttribute('width', '100%'); overlayRect.setAttribute('height', '100%'); overlayRect.setAttribute('fill', 'rgba(1,4,12,0.72)'); overlayRect.setAttribute('mask', 'url(#tourMask)');
+    svgOverlay.appendChild(defs); svgOverlay.appendChild(overlayRect); document.body.appendChild(svgOverlay);
+
+    const tourBox = document.createElement('div'); tourBox.style.minWidth = '320px'; tourBox.style.maxWidth = '560px'; tourBox.style.padding = '14px'; tourBox.style.borderRadius = '10px'; tourBox.style.background = 'linear-gradient(180deg, rgba(12,18,28,0.98), rgba(6,10,18,0.98))'; tourBox.style.color = '#cffeff'; tourBox.style.boxShadow = '0 18px 48px rgba(0,0,0,0.6)'; tourBox.style.fontFamily = 'Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial'; tourBox.style.position = 'fixed'; tourBox.style.zIndex = '90012'; tourBox.style.pointerEvents = 'auto';
+
+    const title = document.createElement('div'); title.style.fontWeight = '800'; title.style.fontSize = '16px'; title.style.marginBottom = '8px'; title.innerText = 'Welcome — Quick tour';
+    const body = document.createElement('div'); body.style.minHeight = '64px'; body.style.marginBottom = '12px'; body.innerText = '';
+
+    const pager = document.createElement('div'); pager.style.display = 'flex'; pager.style.justifyContent = 'space-between'; pager.style.alignItems = 'center';
+    const left = document.createElement('div'); const right = document.createElement('div');
+    const skipBtn = document.createElement('button'); skipBtn.innerText = 'Skip tour'; skipBtn.style.background = 'transparent'; skipBtn.style.border = '1px solid rgba(255,255,255,0.06)'; skipBtn.style.color = '#9ef3ff'; skipBtn.style.padding = '8px 12px'; skipBtn.style.borderRadius = '8px';
+    const prevBtn = document.createElement('button'); prevBtn.innerText = 'Back'; prevBtn.style.display = 'none'; prevBtn.style.padding = '8px 12px'; prevBtn.style.borderRadius = '8px'; prevBtn.style.background = 'transparent'; prevBtn.style.color = '#9ef3ff'; prevBtn.style.border = '1px solid rgba(255,255,255,0.04)';
+    const nextBtn = document.createElement('button'); nextBtn.innerText = 'Next'; nextBtn.className = 'glowBtn'; nextBtn.style.padding = '8px 14px'; nextBtn.style.borderRadius = '8px'; nextBtn.style.background = 'linear-gradient(90deg,#00f0ff,#6f5cff)'; nextBtn.style.border = 'none'; nextBtn.style.color = '#00121a';
+    left.appendChild(skipBtn); right.appendChild(prevBtn); right.appendChild(nextBtn); pager.appendChild(left); pager.appendChild(right);
+
+    tourBox.appendChild(title); tourBox.appendChild(body); tourBox.appendChild(pager); document.body.appendChild(tourBox);
+
+    // highlight ring sits above overlay and box
+    const hl = document.createElement('div'); hl.style.position = 'fixed'; hl.style.pointerEvents = 'none'; hl.style.border = '2px solid rgba(0,240,255,0.95)'; hl.style.borderRadius = '10px'; hl.style.boxShadow = '0 14px 48px rgba(0,160,255,0.18)'; hl.style.zIndex = '90013'; document.body.appendChild(hl);
+
+    // arrow SVG between tourBox and target (on top of overlay)
+    const svgArrow = document.createElementNS(svgNS, 'svg'); svgArrow.setAttribute('id', 'bravoTourArrow'); svgArrow.setAttribute('width', '100%'); svgArrow.setAttribute('height', '100%'); svgArrow.style.position = 'fixed'; svgArrow.style.left = '0'; svgArrow.style.top = '0'; svgArrow.style.pointerEvents = 'none'; svgArrow.style.zIndex = '90011';
+    const defsArrow = document.createElementNS(svgNS, 'defs');
+    const marker = document.createElementNS(svgNS, 'marker'); marker.setAttribute('id', 'arrowhead'); marker.setAttribute('markerWidth', '12'); marker.setAttribute('markerHeight', '12'); marker.setAttribute('refX', '10'); marker.setAttribute('refY', '6'); marker.setAttribute('orient', 'auto');
+    const arrowPath = document.createElementNS(svgNS, 'path'); arrowPath.setAttribute('d', 'M0,0 L0,12 L12,6 z'); arrowPath.setAttribute('fill', '#48c6ff'); marker.appendChild(arrowPath); defsArrow.appendChild(marker); svgArrow.appendChild(defsArrow);
+    const line = document.createElementNS(svgNS, 'line'); line.setAttribute('stroke', '#48c6ff'); line.setAttribute('stroke-width', '3'); line.setAttribute('stroke-linecap', 'round'); line.setAttribute('marker-end', 'url(#arrowhead)'); svgArrow.appendChild(line);
+    document.body.appendChild(svgArrow);
+
+    let idx = 0;
+    function showStep(i) {
+      idx = Math.max(0, Math.min(i, steps.length - 1));
+      const s = steps[idx];
+      // find element
+      const el = (s && s.sel) ? document.querySelector(s.sel) : null;
+      body.innerText = (s && s.text) ? s.text : '';
+      title.innerText = (s && s.title) ? s.title : 'Feature';
+      prevBtn.style.display = idx > 0 ? 'inline-block' : 'none';
+      nextBtn.innerText = idx < steps.length - 1 ? 'Next' : 'Done';
+      // position highlight near element if found
+        if (el && el.getBoundingClientRect) {
+          const r = el.getBoundingClientRect();
+          hl.style.display = 'block';
+          // pad and set highlight
+          const pad = 12;
+          const hx = Math.max(4, r.left - pad);
+          const hy = Math.max(4, r.top - pad);
+          const hw = Math.max(20, r.width + pad * 2);
+          const hh = Math.max(20, r.height + pad * 2);
+          hl.style.left = (hx - 6) + 'px'; hl.style.top = (hy - 6) + 'px'; hl.style.width = (hw + 12) + 'px'; hl.style.height = (hh + 12) + 'px';
+          // update SVG mask hole so background is dimmed except element (rounded)
+          try { const hole = document.getElementById('tourHole'); if (hole) { hole.setAttribute('x', String(hx)); hole.setAttribute('y', String(hy)); hole.setAttribute('width', String(hw)); hole.setAttribute('height', String(hh)); hole.setAttribute('rx','10'); hole.setAttribute('ry','10'); } } catch (e) {}
+        // position tourBox to the right/left of the element if space, otherwise above
+        const spaceRight = window.innerWidth - r.right;
+        if (spaceRight > 520) {
+          tourBox.style.position = 'absolute'; tourBox.style.left = (r.right + 18) + 'px'; tourBox.style.top = Math.max(24, r.top) + 'px'; tourBox.style.transform = 'none';
+        } else if (r.left > 520) {
+          tourBox.style.position = 'absolute'; tourBox.style.left = Math.max(18, r.left - 560 - 18) + 'px'; tourBox.style.top = Math.max(24, r.top) + 'px'; tourBox.style.transform = 'none';
+        } else {
+          tourBox.style.position = 'fixed'; tourBox.style.left = '50%'; tourBox.style.top = '12%'; tourBox.style.transform = 'translateX(-50%)';
+        }
+        // compute arrow endpoints: start at closest tourBox edge, end at target center
+        try {
+          const tb = tourBox.getBoundingClientRect();
+          const tx = r.left + r.width / 2; const ty = r.top + r.height / 2;
+          // find point on tourBox perimeter closest to target
+          let sx = Math.max(tb.left + 8, Math.min(tb.right - 8, tx));
+          let sy = Math.max(tb.top + 8, Math.min(tb.bottom - 8, ty));
+          if (tx > tb.right) sx = tb.right - 8; if (tx < tb.left) sx = tb.left + 8;
+          if (ty > tb.bottom) sy = tb.bottom - 8; if (ty < tb.top) sy = tb.top + 8;
+          // shorten line from tourBox edge slightly to avoid overlap
+          const shorten = 6;
+          // set line coords
+          line.setAttribute('x1', String(sx)); line.setAttribute('y1', String(sy));
+          line.setAttribute('x2', String(tx)); line.setAttribute('y2', String(ty));
+          svgArrow.style.display = 'block';
+        } catch (e) {}
+      } else {
+        // fallback: center overlay
+        hl.style.display = 'none';
+        tourBox.style.position = 'fixed'; tourBox.style.left = '50%'; tourBox.style.top = '12%'; tourBox.style.transform = 'translateX(-50%)';
+        try { svgArrow.style.display = 'none'; } catch (e) {}
+      }
+    }
+
+    function teardown() {
+      try { if (svgOverlay && svgOverlay.parentNode) svgOverlay.parentNode.removeChild(svgOverlay); } catch (e) {}
+      try { if (hl && hl.parentNode) hl.parentNode.removeChild(hl); } catch (e) {}
+      try { if (svgArrow && svgArrow.parentNode) svgArrow.parentNode.removeChild(svgArrow); } catch (e) {}
+      try { if (tourBox && tourBox.parentNode) tourBox.parentNode.removeChild(tourBox); } catch (e) {}
+      try { window.removeEventListener('resize', onWindowChange); window.removeEventListener('scroll', onWindowChange, true); } catch (e) {}
+      try { const roc = (svgOverlay && svgOverlay._teardownObserver); if (roc && typeof roc.disconnect === 'function') roc.disconnect(); } catch (e) {}
+    }
+
+    skipBtn.addEventListener('click', () => { try { localStorage.setItem('bravo_seen_tour_v1', '1'); teardown(); } catch (e) {} });
+    prevBtn.addEventListener('click', () => { try { showStep(idx - 1); } catch (e) {} });
+    nextBtn.addEventListener('click', () => { try { if (idx < steps.length - 1) { showStep(idx + 1); } else { localStorage.setItem('bravo_seen_tour_v1', '1'); teardown(); } } catch (e) {} });
+
+    // initial show
+    showStep(0);
+    // make sure tutorial updates if layout changes
+    const ro = new ResizeObserver(() => { try { showStep(idx); } catch (e) {} });
+    ro.observe(document.body);
+    // update on window resize/scroll
+    function onWindowChange() { try { showStep(idx); } catch (e) {} }
+    window.addEventListener('resize', onWindowChange); window.addEventListener('scroll', onWindowChange, true);
+    // stop observing when torn down
+    try { if (svgOverlay) svgOverlay._teardownObserver = ro; } catch (e) {}
+  } catch (e) { console.warn('showWelcomeTutorial failed', e); }
+}
+
+// Auto-launch tutorial on first run if not locked and not seen
+try { if (!localStorage.getItem('bravo_seen_tour_v1') && !localStorage.getItem('bravo_lock_v1')) setTimeout(() => { try { showWelcomeTutorial(); } catch (e) {} }, 1200); } catch (e) {}
 // Sidebar should remain visible to show year cards
 
 // Connect logic is now handled by the stat card connect button in renderStatsCards
 
-if (refreshBtn) refreshBtn.addEventListener('click', loadDropboxFiles);
+if (refreshBtn) {
+  refreshBtn.addEventListener('click', loadDropboxFiles);
+  try {
+    const helpBtn = document.createElement('button');
+    helpBtn.id = 'helpTourBtn';
+    helpBtn.className = 'glowBtn';
+    helpBtn.innerText = 'Help';
+    helpBtn.title = 'Start the quick tour';
+    helpBtn.style.marginLeft = '8px';
+    helpBtn.style.padding = '8px 12px';
+    // insert the help button after the refresh button if possible
+    try { if (refreshBtn.parentNode) refreshBtn.parentNode.insertBefore(helpBtn, refreshBtn.nextSibling); }
+    catch (e) { try { document.body.appendChild(helpBtn); } catch (ex) {} }
+    helpBtn.addEventListener('click', () => {
+      try {
+        try { localStorage.removeItem('bravo_seen_tour_v1'); } catch (e) {}
+        if (typeof showWelcomeTutorial === 'function') showWelcomeTutorial();
+      } catch (e) { console.warn('help button click failed', e); }
+    });
+  } catch (e) { console.warn('creating help button failed', e); }
+}
 
 function isDropboxActive() {
   try { return document.body.classList && document.body.classList.contains('dropbox-active'); } catch (e) { return false; }
@@ -1135,6 +1297,7 @@ function renderStatsCards(entries) {
     const fileEntries = (entries || []).filter(e => e && (e.raw && (e.raw['.tag'] === 'file') || e['.tag'] === 'file' || (e.raw && e.raw['.tag'] === 'file')));
     const total = document.createElement('div');
     total.className = 'statCard';
+    total.id = 'totalFormsCard';
     // Header indicating these are the user's Dropbox forms
     const totalHeader = document.createElement('div'); totalHeader.className = 'statHeader'; totalHeader.innerText = 'Your forms in Dropbox';
     const totalVal = document.createElement('div'); totalVal.className = 'statValue';
@@ -1150,6 +1313,7 @@ function renderStatsCards(entries) {
 
     const today = document.createElement('div');
     today.className = 'statCard';
+    today.id = 'todayFormsCard';
     // give the Today card a bit more room so action buttons can lay out horizontally
     try { today.style.minWidth = '260px'; today.style.minHeight = '110px'; today.style.paddingBottom = '12px'; } catch (e) {}
     // Header for clarity: "Forms saved today"
@@ -1163,93 +1327,52 @@ function renderStatsCards(entries) {
     const todayVal = document.createElement('div'); todayVal.className = 'statValue';
     const todayCount = (fileEntries || []).reduce((acc, e) => {
       try {
-        if (!e || !e.server_modified) return acc;
-        const d = new Date(e.server_modified);
+        const d = e.server_modified ? new Date(e.server_modified) : null;
+        if (!d || isNaN(d.getTime())) return acc;
         const now = new Date();
         if (d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate()) return acc + 1;
-      } catch (e) {}
-      return acc;
+        return acc;
+      } catch (err) { return acc; }
     }, 0);
-    try {
-      if (!isFeatureEnabled('openToday')) {
-        todayVal.innerText = 'Trial expired';
-      } else {
-        todayVal.innerText = String(todayCount);
-      }
-    } catch (e) { todayVal.innerText = String(todayCount); }
-    // Action button container — use flex with gap and wrap to avoid overlap
-    const todayActions = document.createElement('div');
-    todayActions.style.marginTop = '12px';
-    todayActions.style.display = 'flex';
-    todayActions.style.gap = '8px';
-    todayActions.style.flexWrap = 'wrap';
-    todayActions.style.alignItems = 'center';
-    const openTodayBtn = document.createElement('button'); openTodayBtn.className = 'glowBtn'; openTodayBtn.innerText = 'Open';
-    openTodayBtn.addEventListener('click', (ev) => {
-      try {
-        ev && ev.stopPropagation && ev.stopPropagation();
-        if (!isFeatureEnabled('openToday')) { showTrialExpiredModal('Open Today'); return; }
-        showTodayFormsModal();
-      } catch (e) { console.warn('openTodayBtn failed', e); }
-    });
-    todayActions.appendChild(openTodayBtn);
-    const exportTodayBtn = document.createElement('button'); exportTodayBtn.className = 'glowBtn'; exportTodayBtn.style.marginLeft = '8px'; exportTodayBtn.innerText = "Export All Today's Forms (PDF)";
-    exportTodayBtn.addEventListener('click', async (ev) => {
-      try {
-        ev && ev.stopPropagation && ev.stopPropagation();
-        if (!isFeatureEnabled('batchExport')) { showTrialExpiredModal('Batch export'); return; }
-        const now = new Date();
-        const todays = (fileEntries || []).filter(e => { try { if (!e || !e.server_modified) return false; const d = new Date(e.server_modified); return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate(); } catch (e) { return false; } }).sort((a,b) => new Date(b.server_modified) - new Date(a.server_modified));
-        if (!todays || !todays.length) return showNotification('No forms', 'No forms saved today to export', 'error');
-        // Export all forms saved today
-        const toExport = todays.slice();
-        try { showSpinner('Preparing export...'); } catch (e) {}
-        const wrappers = [];
-        const tempPaths = [];
-        const failed = [];
-        for (const entry of toExport) {
-          try {
-            const hints = [entry.path_lower, entry.path_display, entry.path || entry.name, entry.name];
-            let dl = null;
-            for (const h of hints) {
-              if (!h) continue;
-              try { dl = await window.electronAPI.drive.downloadToTemp(h, entry.name).catch(() => null); } catch (e) { dl = null; }
-              if (dl && dl.ok && dl.path) break;
-            }
-            if (!dl || !dl.ok || !dl.path) { failed.push({ name: entry.name, reason: 'download_failed' }); continue; }
-            tempPaths.push(dl.path);
-            const rf = await window.electronAPI.readFile(dl.path).catch(() => null);
-            if (!rf || !rf.ok) { failed.push({ name: entry.name, reason: 'read_failed' }); continue; }
-            let obj = null; try { obj = JSON.parse(rf.data); } catch (e) { obj = { payload: rf.data }; }
-            const wrapper = obj.payload ? obj : { payload: obj };
-            wrapper.meta = wrapper.meta || {};
-            wrapper.meta.filePath = dl.path;
-            try { if (entry.server_modified) wrapper.meta.server_modified = entry.server_modified; } catch (e) {}
-            try { if (entry.path_lower) wrapper.meta.path_lower = entry.path_lower; } catch (e) {}
-            try { if (entry.name) wrapper.meta.name = entry.name; } catch (e) {}
-            wrappers.push(wrapper);
-          } catch (e) { console.warn('prepare wrapper failed', e); }
-        }
-        if (!wrappers.length) { try { for (const p of tempPaths) await window.electronAPI.drive.deleteLocalForm(p).catch(() => null); } catch (e) {} return showNotification('No valid forms', 'No forms prepared for export', 'error'); }
-        try { hideSpinner(); } catch (e) {}
-        const res = await window.electronAPI.exportFormsPdf(wrappers, { year: String(now.getFullYear()), baseName: 'forms_today', saveToDocuments: true });
-        if (res && res.ok) {
-          // auto-open the saved PDF in folder if possible
-          try { if (window.electronAPI && typeof window.electronAPI.revealInFolder === 'function') await window.electronAPI.revealInFolder(res.pdfPath); } catch (e) { console.warn('revealInFolder failed', e); }
-          showNotification('Export saved', 'Saved to Documents', 'success');
-          try { for (const p of tempPaths) await window.electronAPI.drive.deleteLocalForm(p).catch(() => null); } catch (e) {}
-        } else {
-          showNotification('Export failed', (res && res.error) ? res.error : 'Unknown error', 'error');
-          try { for (const p of tempPaths) await window.electronAPI.drive.deleteLocalForm(p).catch(() => null); } catch (e) {}
-        }
-      } catch (e) { console.warn('exportTodayBtn failed', e); showNotification('Export failed', String(e), 'error'); }
-      finally { try { hideSpinner(); } catch (e) {} }
-    });
-    todayActions.appendChild(exportTodayBtn);
-    // Compose today card
+    try { todayVal.innerText = String(todayCount); } catch (e) { todayVal.innerText = '0'; }
+    const todayActions = document.createElement('div'); todayActions.className = 'statActions';
     today.appendChild(todayHeader);
     today.appendChild(todayVal);
     today.appendChild(todayActions);
+    try {
+      const openBtn = document.createElement('button');
+      openBtn.className = 'glowBtn';
+      openBtn.innerText = 'Open';
+      openBtn.style.padding = '8px 10px';
+      // disable if feature gated or no items today
+      try { openBtn.disabled = !isFeatureEnabled('openToday') || (Number(todayVal.innerText || 0) === 0); } catch (e) {}
+      openBtn.title = !isFeatureEnabled('openToday') ? 'Requires activation' : 'Open today\'s forms';
+      openBtn.addEventListener('click', (ev) => {
+        try {
+          ev && ev.stopPropagation && ev.stopPropagation();
+          if (!isFeatureEnabled('openToday')) { showTrialExpiredModal('Open Today'); return; }
+          showTodayFormsModal();
+        } catch (e) { console.warn('today open failed', e); }
+      });
+
+      const exportBtnSmall = document.createElement('button');
+      exportBtnSmall.className = 'glowBtn';
+      exportBtnSmall.innerText = 'Export';
+      exportBtnSmall.style.padding = '8px 10px';
+      try { exportBtnSmall.disabled = !isFeatureEnabled('batchExport') || (Number(todayVal.innerText || 0) === 0); } catch (e) {}
+      exportBtnSmall.title = !isFeatureEnabled('batchExport') ? 'Requires activation' : 'Export today\'s forms';
+      exportBtnSmall.addEventListener('click', (ev) => {
+        try {
+          ev && ev.stopPropagation && ev.stopPropagation();
+          if (!isFeatureEnabled('batchExport')) { showTrialExpiredModal('Batch export'); return; }
+          // open the Today modal so user can select and export
+          showTodayFormsModal();
+        } catch (e) { console.warn('today export failed', e); }
+      });
+
+      todayActions.appendChild(openBtn);
+      todayActions.appendChild(exportBtnSmall);
+    } catch (e) { console.warn('wiring today actions failed', e); }
     // Make the whole card clickable as well
     try { today.style.cursor = 'pointer'; } catch (e) {}
     try { today.addEventListener('click', () => { try { if (!isFeatureEnabled('openToday')) { showTrialExpiredModal('Open Today'); return; } showTodayFormsModal(); } catch (e) { console.warn('showTodayFormsModal failed', e); } }); } catch (e) {}
@@ -2987,22 +3110,39 @@ function showTodayFormsModal() {
           groups[timeKey].forEach(ent => {
             const row = document.createElement('div'); row.className = 'fileItem';
             const left = document.createElement('div'); left.style.display = 'flex'; left.style.flexDirection = 'column';
-            const name = document.createElement('div'); name.className = 'fileName'; name.innerText = getFriendlyTitle(ent);
-            const meta = document.createElement('div'); meta.className = 'meta'; meta.innerText = ent.server_modified ? new Date(ent.server_modified).toLocaleTimeString() : '';
-            left.appendChild(name); left.appendChild(meta);
-            const actions = document.createElement('div'); actions.style.display = 'flex'; actions.style.gap = '8px';
-            const open = document.createElement('button'); open.innerText = 'Open';
-            open.addEventListener('click', async () => {
-              try {
-                const r = await window.electronAPI.drive.downloadToTemp(ent.path_lower, ent.name);
-                if (!r || !r.ok || !r.path) return showNotification('Open failed', (r && r.error) || 'Download failed', 'error');
-                const localEntry = { title: getFriendlyTitle(ent), meta: { filePath: r.path }, _overlayZ: 31000 };
-                try { await openEntryModal(localEntry); } catch (e) { console.warn('openEntryModal failed', e); }
-                try { await window.electronAPI.drive.deleteLocalForm(r.path); } catch (e) {}
-              } catch (e) { console.warn('Open action failed', e); showNotification('Open failed', String(e), 'error'); }
-            });
-            actions.appendChild(open);
-            row.appendChild(left); row.appendChild(actions); listWrapper.appendChild(row);
+              const name = document.createElement('div'); name.className = 'fileName'; name.innerText = getFriendlyTitle(ent);
+              const meta = document.createElement('div'); meta.className = 'meta'; meta.innerText = ent.server_modified ? new Date(ent.server_modified).toLocaleTimeString() : '';
+              left.appendChild(name); left.appendChild(meta);
+              const actions = document.createElement('div'); actions.style.display = 'flex'; actions.style.gap = '8px';
+              // selectable checkbox for batch export when this is a file
+              const isFile = (ent && ((ent.raw && ent.raw['.tag'] === 'file') || (ent['.tag'] === 'file') || (/\.json$/i.test(ent.name || ''))));
+              if (isFile) {
+                const chk = document.createElement('input'); chk.type = 'checkbox'; chk.className = 'batchExportCheckbox'; chk.style.marginBottom = '8px'; chk.style.alignSelf = 'flex-start'; chk._entry = ent;
+                chk.addEventListener('change', (ev) => {
+                  try {
+                    if (chk.checked) {
+                      if (selectedSet.size >= MAX_BATCH) { chk.checked = false; showNotification('Selection limit', `You can select up to ${MAX_BATCH} forms`, 'error'); return; }
+                      selectedSet.add(ent.path_lower || ent.id || ent.name || JSON.stringify(ent));
+                    } else {
+                      selectedSet.delete(ent.path_lower || ent.id || ent.name || JSON.stringify(ent));
+                    }
+                    try { exportBtn.innerText = `Export Selected (${selectedSet.size})`; exportBtn.disabled = selectedSet.size === 0; } catch (e) {}
+                  } catch (e) { console.warn('today batch checkbox change failed', e); }
+                });
+                left.appendChild(chk);
+              }
+              const open = document.createElement('button'); open.innerText = 'Open';
+              open.addEventListener('click', async () => {
+                try {
+                  const r = await window.electronAPI.drive.downloadToTemp(ent.path_lower, ent.name);
+                  if (!r || !r.ok || !r.path) return showNotification('Open failed', (r && r.error) || 'Download failed', 'error');
+                  const localEntry = { title: getFriendlyTitle(ent), meta: { filePath: r.path }, _overlayZ: 31000 };
+                  try { await openEntryModal(localEntry); } catch (e) { console.warn('openEntryModal failed', e); }
+                  try { await window.electronAPI.drive.deleteLocalForm(r.path); } catch (e) {}
+                } catch (e) { console.warn('Open action failed', e); showNotification('Open failed', String(e), 'error'); }
+              });
+              actions.appendChild(open);
+              row.appendChild(left); row.appendChild(actions); listWrapper.appendChild(row);
           });
         });
       } catch (e) { console.warn('renderGrouped (today) failed', e); }
