@@ -16,6 +16,28 @@ export default function FoodHandlersDailyShoweringPresentational({ payload }) {
   const logEntries = p.logEntries || [];
   const logoDataUri = p.assets && p.assets.logoDataUri;
 
+  const normalizeSigUri = (v) => {
+    if (!v) return null;
+    try {
+      if (typeof v === 'object') {
+        if (v.dataUri && String(v.dataUri).trim()) return String(v.dataUri).trim();
+        if (v.uri && String(v.uri).trim()) return String(v.uri).trim();
+        if (v.url && String(v.url).trim()) return String(v.url).trim();
+        if (v.signature && String(v.signature).trim()) return String(v.signature).trim();
+        // fallback to stringify (unlikely)
+        v = JSON.stringify(v);
+      }
+    } catch (e) {}
+    const s = String(v || '');
+    if (!s) return null;
+    if (s.startsWith('data:')) return s;
+    if (/^https?:\/\//i.test(s)) return s;
+    // treat long base64 strings as image data
+    const compact = s.replace(/\s+/g, '');
+    if (compact.length > 100) return `data:image/png;base64,${compact}`;
+    return null;
+  };
+
   const hints = p.layoutHints || {};
   const widths = Array.isArray(hints.widths) && hints.widths.length ? hints.widths : (
     [180, 120].concat(Array.from({ length: 7 * 2 }, (_, i) => i % 2 === 0 ? 70 : 100)).concat([110])
@@ -67,14 +89,16 @@ export default function FoodHandlersDailyShoweringPresentational({ payload }) {
           <Text style={styles.meta}>Month: {month}</Text>
           <Text style={styles.meta}>Year: {year}</Text>
           <View style={styles.verifiedWrap}>
+            <Text style={styles.metaLabel}>Verified By</Text>
             {(() => {
-              const v = p.metadata?.verifiedBySign || verifiedBy || p.metadata?.verifiedBy || null;
-              const uri = v ? (String(v).startsWith('data:') ? v : `data:image/png;base64,${v}`) : null;
-              return uri ? (
-                <SignatureThumb uri={uri} width={150} height={40} layers={6} spread={1.0} />
-              ) : (
-                <Text style={styles.meta}>Verified By: {verifiedBy}</Text>
-              );
+              const raw = p.metadata?.verifiedBySign || p.metadata?.verifiedBy || verifiedBy || null;
+              const uri = normalizeSigUri(raw);
+              if (uri) {
+                return <SignatureThumb uri={uri} width={150} height={40} layers={6} spread={1.0} />;
+              }
+              // fallback to textual name if provided
+              const name = (p.metadata && (p.metadata.verifiedBy || p.metadata.verified_by)) || verifiedBy || '';
+              return <Text style={styles.meta}>{name}</Text>;
             })()}
           </View>
         </View>
@@ -177,6 +201,7 @@ const styles = StyleSheet.create({
   metaValue: { fontSize: 12, borderBottomWidth: 1, borderBottomColor: '#eee', minWidth: 100 },
   meta: { fontSize: 12, marginRight: 15 },
   verifiedWrap: { marginLeft: 'auto' },
+  verifiedName: { fontSize: 12 },
   
   // Table Styling
   table: { borderWidth: 1.5, borderColor: '#000' },

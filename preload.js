@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   generateFormHtml: (payload) => ipcRenderer.invoke('generate-form-html', payload),
     // Export helpers: export via server-side generator or send a captured PNG to main to save as PDF
     exportFormPdf: (payloadWrapper, opts) => ipcRenderer.invoke('export-form-pdf', payloadWrapper, opts),
+    exportFormsPdf: (payloadWrappers, opts) => ipcRenderer.invoke('export-forms-pdf', payloadWrappers, opts),
   drive: {
     signIn: () => ipcRenderer.invoke('drive-signin'),
     signOut: () => ipcRenderer.invoke('drive-signout'),
@@ -30,6 +31,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     onUnmaximized: (cb) => { ipcRenderer.on('window-unmaximized', cb); }
   }
   ,
+  // Reveal a file in the user's file manager (desktop only)
+  revealInFolder: (filePath) => ipcRenderer.invoke('reveal-in-folder', filePath),
   updates: {
     onUpdateAvailable: (cb) => { ipcRenderer.on('update-available', (ev, info) => cb(info)); },
     onUpdateDownloaded: (cb) => { ipcRenderer.on('update-downloaded', (ev, info) => cb(info)); },

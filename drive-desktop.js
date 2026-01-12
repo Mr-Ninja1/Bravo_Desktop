@@ -270,13 +270,52 @@ async function downloadToTemp(pathLower, filenameHint) {
 
 async function getDebugInfo() {
   const rt = await getToken(REFRESH_TOKEN);
-  return { clientId: DROPBOX_APP_KEY || null, hasRefreshToken: Boolean(rt) };
+  const info = { clientId: DROPBOX_APP_KEY || null, hasRefreshToken: Boolean(rt) };
+  // If signed in, attempt to retrieve space usage so renderer can show storage stats
+  try {
+    const token = await getAccessToken().catch(() => null);
+    if (!token) return info;
+    const res = await fetch('https://api.dropboxapi.com/2/users/get_space_usage', { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: 'null' });
+    if (!res.ok) {
+      const txt = await res.text().catch(() => '');
+      info._spaceError = `status:${res.status} ${String(txt).slice(0,240)}`;
+      return info;
+    }
+    const data = await res.json().catch(() => null);
+    if (data) {
+      // Normalize possible shapes to fields the renderer expects
+      let used = 0, total = 0;
+      try {
+        if (typeof data.used === 'number') used = data.used;
+        else if (typeof data.space_used === 'number') used = data.space_used;
+      } catch (e) {}
+      try {
+        if (data.allocation) {
+          // allocation: may contain allocated (bytes) or other structures
+          if (typeof data.allocation.allocated === 'number') total = data.allocation.allocated;
+          else if (typeof data.allocation.allocated_bytes === 'number') total = data.allocation.allocated_bytes;
+        }
+        if (!total && typeof data.allocation === 'number') total = data.allocation;
+        if (!total && typeof data.space_total === 'number') total = data.space_total;
+      } catch (e) {}
+      // Attach multiple fallback fields for renderer parsing
+      info.quota = { used_bytes: used, allocation: { allocated_bytes: total } };
+      info.usage = { used: used, total: total };
+      info.space_used = used;
+      info.space_total = total;
+    }
+  } catch (e) {
+    info._spaceError = String(e && e.message ? e.message : e).slice(0,240);
+  }
+  return info;
 }
 
 async function getCurrentAccount() {
   const token = await getAccessToken();
   if (!token) throw new Error('Not signed in');
-  const res = await fetch('https://api.dropboxapi.com/2/users/get_current_account', { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } });
+  // Dropbox `users/get_current_account` expects a null body (no parameters).
+  // Sending a JSON `null` literal satisfies the API's expectation (it rejects an object like {}).
+  const res = await fetch('https://api.dropboxapi.com/2/users/get_current_account', { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: 'null' });
   if (!res.ok) {
     const txt = await res.text().catch(() => '');
     throw new Error(`account fetch failed: ${res.status} ${txt}`);

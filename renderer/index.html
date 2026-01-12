@@ -26,7 +26,10 @@
           <div class="left">
             <!-- hamburger removed: not used -->
             <img id="logoSmall" src="../assets/logo.jpeg" alt="logo" />
-            <h2>Bravo forms managment app</h2>
+          </div>
+          <!-- Centered app title (visual only) -->
+          <div class="topbar-center">
+            <h2 id="centerAppTitle">BRAVO FOOD SAFETY MANAGEMENT APP</h2>
           </div>
           <div class="right">
             <div id="userInfo" class="userInfo" style="display:none">
@@ -56,27 +59,37 @@
         </header>
         <!-- Update banner (populated by renderer UpdateNotifier) -->
         <div id="updateBanner" style="position:relative;z-index:60"></div>
-        <!-- Controls row below the titlebar: search + buttons. Filters hidden for now. -->
-          <div class="controlsBar">
-          <div id="controls" class="controls-visible">
-            <div class="controls-left">
-              <input id="searchInput" placeholder="Search saved forms (name, site, type...)" />
-              <label class="dateField" for="dateFrom">
-                <input id="dateFrom" type="date" />
-                <svg class="dateIcon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="#64748b" d="M7 10h5v5H7z" opacity=".6"></path><path fill="#64748b" d="M19 4h-1V2h-2v2H8V2H6v2H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2zM5 20V9h14v11H5z"></path></svg>
-              </label>
-              <label class="dateField" for="dateTo">
-                <input id="dateTo" type="date" />
-                <svg class="dateIcon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="#64748b" d="M7 10h5v5H7z" opacity=".6"></path><path fill="#64748b" d="M19 4h-1V2h-2v2H8V2H6v2H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2zM5 20V9h14v11H5z"></path></svg>
-              </label>
-              <div id="quickFilters" style="display:flex;align-items:center;gap:6px;margin-right:8px"></div>
+        <!-- Controls row below the titlebar: minimal container with Refresh (no bordered wrapper) -->
+        <div class="controlsBar">
+          <div id="controls" style="max-width:1200px;width:100%;display:flex;align-items:center;justify-content:flex-end;gap:12px;">
+            <div id="extraCardsArea" class="extra-cards-area" style="display:flex;align-items:center;gap:12px;flex:1;min-width:0;">
+              <div class="statsRowExtra" style="display:flex;gap:16px;align-items:center;pointer-events:auto">
+                <div class="statCard small userCard">
+                  <div style="display:flex;gap:12px;align-items:center;width:100%">
+                    <img class="cardBadge" src="../assets/image.png" style="display:block" />
+                    <img class="statAvatar" src="" style="width:36px;height:36px;border-radius:50%;object-fit:cover;border:2px solid rgba(255,255,255,0.06)">
+                    <div style="flex:1;min-width:0">
+                      <div class="statHeader">Connected as</div>
+                      <div class="statValue smallName">Not signed in</div>
+                      <div class="statLabel smallMuted">—</div>
+                    </div>
+                  </div>
+                </div>
+                <div class="statCard small storageCard">
+                  <div style="width:100%">
+                    <img class="cardBadge" src="../assets/image.png" style="display:block" />
+                    <div class="statHeader">Dropbox storage</div>
+                    <div class="statValue storageNumbers">Unknown</div>
+                    <div class="storageProgress" style="width:100%;max-width:200px;height:12px;background:rgba(255,255,255,0.06);border-radius:8px;overflow:hidden;margin-top:8px">
+                      <div class="storageFill" style="width:0%;height:100%;background:linear-gradient(90deg,#1ea7ff,#6f5cff)"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
             <div class="controls-right">
               <button id="refreshList">Refresh</button>
             </div>
-            <!-- Filters temporarily hidden: year/month selectors will be re-added later -->
-            <select id="yearSelect" style="display:none"><option value="all">All years</option></select>
-            <select id="monthSelect" style="display:none"><option value="all">All months</option></select>
           </div>
         </div>
 

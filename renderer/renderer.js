@@ -19,6 +19,114 @@ let dropboxIcon = null;
 let dropboxStatusEls = [];
 let disconnectBtn = null;
 
+// --- Simple local trial / product-key gating
+const LICENSE_KEY = 'bravo_license_v1';
+const TRIAL_DAYS = 7; // configurable trial length
+// URL to a public JSON file listing issued keys. Set to your repo raw URL.
+const KEYS_JSON_URL = 'https://raw.githubusercontent.com/Mr-Ninja1/Bravo_Desktop/main/keys.json';
+
+// Validate a provided key against a hosted keys.json file.
+async function validateKeyOnline(key, url) {
+  try {
+    if (!url || !key) return { found: false };
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 7000);
+    const res = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeout);
+    if (!res || !res.ok) return { found: false };
+    const data = await res.json().catch(() => null);
+    if (!data) return { found: false };
+    const list = Array.isArray(data) ? data : (data.keys || data.list || []);
+    const rec = (list || []).find(k => (k && (k.key === key || k.code === key)));
+    if (!rec) return { found: false };
+    return { found: true, used: !!rec.used, record: rec };
+  } catch (e) { return { found: false }; }
+}
+function _loadLicense() {
+  try {
+    const raw = localStorage.getItem(LICENSE_KEY);
+    if (!raw) return { trialStart: null, unlockedFeatures: {}, productKey: null };
+    return JSON.parse(raw || '{}');
+  } catch (e) { return { trialStart: null, unlockedFeatures: {}, productKey: null }; }
+}
+function _saveLicense(obj) { try { localStorage.setItem(LICENSE_KEY, JSON.stringify(obj || {})); } catch (e) {} }
+function licenseInit() {
+  try {
+    const s = _loadLicense();
+    if (!s.trialStart) { s.trialStart = (new Date()).toISOString(); _saveLicense(s); }
+    return s;
+  } catch (e) { return _loadLicense(); }
+}
+const _licenseState = licenseInit();
+function isTrialExpired() {
+  try {
+    if (_licenseState.productKey) return false;
+    const start = _licenseState.trialStart ? new Date(_licenseState.trialStart) : null;
+    if (!start) return false;
+    const expiry = new Date(start.getTime() + (TRIAL_DAYS * 24 * 60 * 60 * 1000));
+    return new Date() > expiry;
+  } catch (e) { return true; }
+}
+function isFeatureEnabled(feature) {
+  try {
+    if (_licenseState.productKey) return true;
+    if (_licenseState.unlockedFeatures && _licenseState.unlockedFeatures[feature]) return true;
+    return !isTrialExpired();
+  } catch (e) { return false; }
+}
+function unlockAllWithKey(key) {
+  try {
+    if (!key) return false;
+    _licenseState.productKey = String(key);
+    _licenseState.unlockedFeatures = _licenseState.unlockedFeatures || {};
+    _licenseState.unlockedFeatures['batchExport'] = true;
+    _licenseState.unlockedFeatures['openToday'] = true;
+    _licenseState.unlockedFeatures['storageCard'] = true;
+    _saveLicense(_licenseState);
+    return true;
+  } catch (e) { return false; }
+}
+function showTrialExpiredModal(featureReadable) {
+  try {
+    const overlay = document.createElement('div'); overlay.className = 'modalOverlay'; overlay.style.zIndex = 62000;
+    const box = document.createElement('div'); box.className = 'modalBox'; box.style.minWidth = '360px'; box.style.maxWidth = '80%'; box.style.padding = '12px'; box.style.position = 'relative';
+    const h = document.createElement('div'); h.style.fontWeight = '800'; h.style.marginBottom = '8px'; h.innerText = `${featureReadable} — Trial expired`;
+    const p = document.createElement('div'); p.style.color = '#475569'; p.style.marginBottom = '12px'; p.innerText = 'This feature is part of a paid add-on. Your trial period has ended. Contact the developer to purchase a product key to unlock.';
+    const actions = document.createElement('div'); actions.style.display = 'flex'; actions.style.justifyContent = 'flex-end'; actions.style.gap = '8px';
+    const enter = document.createElement('button'); enter.className = 'glowBtn'; enter.innerText = 'Enter product key';
+    const close = document.createElement('button'); close.innerText = 'Close'; close.style.border = '1px solid #e2e8f0'; close.style.background = '#fff';
+    actions.appendChild(close); actions.appendChild(enter);
+    box.appendChild(h); box.appendChild(p); box.appendChild(actions); overlay.appendChild(box); document.body.appendChild(overlay);
+    close.addEventListener('click', () => { try { document.body.removeChild(overlay); } catch (e) {} });
+    enter.addEventListener('click', async () => {
+      try {
+        const key = prompt('Enter product key:');
+        if (!key) return;
+        // If KEYS_JSON_URL is configured, validate online first
+        let ok = false;
+        if (KEYS_JSON_URL && KEYS_JSON_URL.includes('raw.githubusercontent.com')) {
+          try {
+            const v = await validateKeyOnline(key, KEYS_JSON_URL);
+            if (!v.found) { showNotification('Activation failed', 'Key not found', 'error'); return; }
+            if (v.used) { showNotification('Activation failed', 'Key already used', 'error'); return; }
+            // found and unused — accept locally but remind admin to mark used manually
+            ok = unlockAllWithKey(key);
+            if (ok) showNotification('Activated', 'Product key accepted — features unlocked. Remember to mark the key as used in your hosted keys.json', 'success');
+          } catch (e) { console.warn('online key validation failed', e); }
+        }
+        // Fallback: local-only activation
+        if (!ok) {
+          const localOk = unlockAllWithKey(key);
+          try { document.body.removeChild(overlay); } catch (e) {}
+          if (localOk) showNotification('Activated (local)', 'Product key saved locally — features unlocked', 'success'); else showNotification('Activation failed', 'Invalid key', 'error');
+        } else {
+          try { document.body.removeChild(overlay); } catch (e) {}
+        }
+      } catch (e) { console.warn('enter key failed', e); }
+    });
+  } catch (e) { console.warn('showTrialExpiredModal failed', e); }
+}
+
 function initFooter() {
   try {
     const footers = Array.from(document.querySelectorAll('.app-footer'));
@@ -76,6 +184,119 @@ function initFooter() {
   } catch (e) { console.warn('initFooter failed', e); }
 }
 
+// Populate any static extra cards already present in the DOM (userCard, storageCard)
+async function updateExtraCards() {
+  try {
+    const host = document.getElementById('extraCardsArea') || document.querySelector('.extra-cards-area') || document.getElementById('displayContainer') || document.body;
+    if (!host) return;
+    const userCard = host.querySelector('.userCard') || document.querySelector('.userCard');
+    const storageCard = host.querySelector('.storageCard') || document.querySelector('.storageCard');
+    
+
+    // Populate account info
+    try {
+      const acc = (window.electronAPI && window.electronAPI.drive && typeof window.electronAPI.drive.getAccount === 'function')
+        ? await window.electronAPI.drive.getAccount().catch(() => null)
+        : null;
+      if (acc && acc.ok && acc.info) {
+        const info = acc.info;
+        const name = (info.name && info.name.display_name) ? info.name.display_name : (info.email || 'Dropbox User');
+        const email = info.email || '';
+        if (userCard) {
+          const avatarImg = userCard.querySelector('img.statAvatar');
+          const nameEl = userCard.querySelector('.smallName');
+          const labelEl = userCard.querySelector('.statLabel');
+          try { if (avatarImg && info.profile_photo_url) avatarImg.src = info.profile_photo_url; else if (avatarImg) avatarImg.style.display = 'none'; } catch (e) {}
+          try { if (nameEl) nameEl.innerText = name; } catch (e) {}
+          try { if (labelEl) labelEl.innerText = email; } catch (e) {}
+        }
+      }
+    } catch (e) { }
+
+    // Populate storage/quota info
+    try {
+      const dbg = (window.electronAPI && window.electronAPI.drive && typeof window.electronAPI.drive.getDebug === 'function')
+        ? await window.electronAPI.drive.getDebug().catch(() => null)
+        : null;
+      let used = 0, total = 0;
+      if (dbg && dbg.ok && dbg.info) {
+        const info = dbg.info;
+        if (info.quota) {
+          used = info.quota.used_bytes || info.quota.used || 0;
+          total = (info.quota.allocation && (info.quota.allocation.allocated_bytes || info.quota.allocation)) || info.quota.allocated_bytes || 0;
+        } else if (info.usage) {
+          used = info.usage.used || info.usage.used_bytes || 0;
+          total = info.usage.total || 0;
+        } else if (typeof info.space_used !== 'undefined') {
+          used = info.space_used || 0; total = info.space_total || 0;
+        }
+      }
+      if (storageCard) {
+          const numbers = storageCard.querySelector('.storageNumbers');
+          const fill = storageCard.querySelector('.storageFill');
+          if (!isFeatureEnabled('storageCard')) {
+            try { if (numbers) numbers.innerText = 'Trial expired'; } catch (e) {}
+            try { if (fill) fill.style.width = '0%'; } catch (e) {}
+          } else {
+            if (total > 0) {
+              const pct = Math.max(0, Math.min(100, Math.round((used / total) * 100)));
+              const formatStorage = (bytes) => {
+                try {
+                  const gb = bytes / 1024 / 1024 / 1024;
+                  if (gb >= 1) return gb.toFixed(1) + ' GB';
+                  const mb = bytes / 1024 / 1024;
+                  return mb.toFixed(1) + ' MB';
+                } catch (e) { return '0.0 GB'; }
+              };
+              try { if (numbers) numbers.innerText = `${formatStorage(used)} / ${formatStorage(total)}`; } catch (e) {}
+              try { if (fill) fill.style.width = pct + '%'; } catch (e) {}
+            } else {
+              try { if (numbers) numbers.innerText = 'Unknown'; } catch (e) {}
+            }
+          }
+      }
+    } catch (e) { }
+
+    // If account fetch failed but we have a refresh token, try polling for account info
+    try {
+      const dbgForPoll = (window.electronAPI && window.electronAPI.drive && typeof window.electronAPI.drive.getDebug === 'function')
+        ? await window.electronAPI.drive.getDebug().catch(() => null)
+        : null;
+      if ((!(window._lastAccountSuccess)) && dbgForPoll && dbgForPoll.ok && dbgForPoll.info && dbgForPoll.info.hasRefreshToken) {
+        // quick UI hint
+        try {
+          const uc = document.querySelector('.userCard .smallName'); if (uc && uc.innerText && (uc.innerText === 'Not signed in' || uc.innerText === '')) uc.innerText = 'Signed in — fetching...';
+        } catch (e) {}
+        // start a short polling loop to re-attempt getAccount (useful if OAuth just completed)
+        (async function pollForAccount(attempts = 6, interval = 2000) {
+          for (let i = 0; i < attempts; i++) {
+            try {
+              const a = (window.electronAPI && window.electronAPI.drive && typeof window.electronAPI.drive.getAccount === 'function')
+                ? await window.electronAPI.drive.getAccount().catch(() => null)
+                : null;
+              if (a && a.ok && a.info) {
+                try { updateExtraCards(); } catch (e) {}
+                window._lastAccountSuccess = true;
+                return;
+              }
+            } catch (e) { }
+            await new Promise(r => setTimeout(r, interval));
+          }
+        })();
+      }
+    } catch (e) { /* ignore polling setup failures */ }
+
+    // Wire manage button if present
+    try {
+      const mbtn = document.getElementById('manageStorageBtn') || (host && host.querySelector && host.querySelector('#manageStorageBtn'));
+      if (mbtn) {
+        mbtn.removeEventListener && mbtn.removeEventListener('click', mbtn._manageHandler || (() => {}));
+        const handler = () => { try { if (typeof showManageConnectionModal === 'function') return showManageConnectionModal(); if (window.electronAPI && typeof window.electronAPI.revealInFolder === 'function') window.electronAPI.revealInFolder(''); } catch (e) {} };
+        try { mbtn.addEventListener('click', handler); mbtn._manageHandler = handler; } catch (e) {}
+      }
+    } catch (e) { /* ignore */ }
+  } catch (e) { console.warn('updateExtraCards overall failed', e); }
+}
 const messages = [
   'Starting app',
   'Loading forms',
@@ -166,7 +387,7 @@ function hideSpinner(force) {
 // Simple notification modal (replaces alert)
 function showNotification(title, message, type) {
   try {
-    const overlay = document.createElement('div'); overlay.className = 'modalOverlay'; overlay.style.zIndex = 40001;
+    const overlay = document.createElement('div'); overlay.className = 'modalOverlay'; overlay.style.setProperty('z-index','60001','important');
     const box = document.createElement('div'); box.className = 'modalBox';
     const h = document.createElement('div'); h.style.fontWeight = '800'; h.style.marginBottom = '8px'; h.innerText = title || '';
     const p = document.createElement('div'); p.innerText = message || '';
@@ -249,7 +470,7 @@ initFooter();
 
 // Connect logic is now handled by the stat card connect button in renderStatsCards
 
-refreshBtn.addEventListener('click', loadDropboxFiles);
+if (refreshBtn) refreshBtn.addEventListener('click', loadDropboxFiles);
 
 function isDropboxActive() {
   try { return document.body.classList && document.body.classList.contains('dropbox-active'); } catch (e) { return false; }
@@ -513,6 +734,8 @@ function renderStatsCards(entries) {
 
     const today = document.createElement('div');
     today.className = 'statCard';
+    // give the Today card a bit more room so action buttons can lay out horizontally
+    try { today.style.minWidth = '260px'; today.style.minHeight = '110px'; today.style.paddingBottom = '12px'; } catch (e) {}
     // Header for clarity: "Forms saved today"
     const todayHeader = document.createElement('div');
     todayHeader.className = 'statHeader';
@@ -532,18 +755,76 @@ function renderStatsCards(entries) {
       return acc;
     }, 0);
     todayVal.innerText = String(todayCount);
-    // Action button to make interactivity discoverable
-    const todayActions = document.createElement('div'); todayActions.style.marginTop = '12px';
+    // Action button container — use flex with gap and wrap to avoid overlap
+    const todayActions = document.createElement('div');
+    todayActions.style.marginTop = '12px';
+    todayActions.style.display = 'flex';
+    todayActions.style.gap = '8px';
+    todayActions.style.flexWrap = 'wrap';
+    todayActions.style.alignItems = 'center';
     const openTodayBtn = document.createElement('button'); openTodayBtn.className = 'glowBtn'; openTodayBtn.innerText = 'Open';
-    openTodayBtn.addEventListener('click', (ev) => { try { ev.stopPropagation(); showTodayFormsModal(); } catch (e) { console.warn('openTodayBtn failed', e); } });
+    openTodayBtn.addEventListener('click', (ev) => { try { ev.stopPropagation(); if (!isFeatureEnabled('openToday')) { showTrialExpiredModal('Open Today'); return; } showTodayFormsModal(); } catch (e) { console.warn('openTodayBtn failed', e); } });
     todayActions.appendChild(openTodayBtn);
+    const exportTodayBtn = document.createElement('button'); exportTodayBtn.className = 'glowBtn'; exportTodayBtn.style.marginLeft = '8px'; exportTodayBtn.innerText = "Export All Today's Forms (PDF)";
+    exportTodayBtn.addEventListener('click', async (ev) => {
+      try {
+        ev && ev.stopPropagation && ev.stopPropagation();
+        if (!isFeatureEnabled('batchExport')) { showTrialExpiredModal('Batch export'); return; }
+        const now = new Date();
+        const todays = (fileEntries || []).filter(e => { try { if (!e || !e.server_modified) return false; const d = new Date(e.server_modified); return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate(); } catch (e) { return false; } }).sort((a,b) => new Date(b.server_modified) - new Date(a.server_modified));
+        if (!todays || !todays.length) return showNotification('No forms', 'No forms saved today to export', 'error');
+        // Export all forms saved today
+        const toExport = todays.slice();
+        try { showSpinner('Preparing export...'); } catch (e) {}
+        const wrappers = [];
+        const tempPaths = [];
+        const failed = [];
+        for (const entry of toExport) {
+          try {
+            const hints = [entry.path_lower, entry.path_display, entry.path || entry.name, entry.name];
+            let dl = null;
+            for (const h of hints) {
+              if (!h) continue;
+              try { dl = await window.electronAPI.drive.downloadToTemp(h, entry.name).catch(() => null); } catch (e) { dl = null; }
+              if (dl && dl.ok && dl.path) break;
+            }
+            if (!dl || !dl.ok || !dl.path) { failed.push({ name: entry.name, reason: 'download_failed' }); continue; }
+            tempPaths.push(dl.path);
+            const rf = await window.electronAPI.readFile(dl.path).catch(() => null);
+            if (!rf || !rf.ok) { failed.push({ name: entry.name, reason: 'read_failed' }); continue; }
+            let obj = null; try { obj = JSON.parse(rf.data); } catch (e) { obj = { payload: rf.data }; }
+            const wrapper = obj.payload ? obj : { payload: obj };
+            wrapper.meta = wrapper.meta || {};
+            wrapper.meta.filePath = dl.path;
+            try { if (entry.server_modified) wrapper.meta.server_modified = entry.server_modified; } catch (e) {}
+            try { if (entry.path_lower) wrapper.meta.path_lower = entry.path_lower; } catch (e) {}
+            try { if (entry.name) wrapper.meta.name = entry.name; } catch (e) {}
+            wrappers.push(wrapper);
+          } catch (e) { console.warn('prepare wrapper failed', e); }
+        }
+        if (!wrappers.length) { try { for (const p of tempPaths) await window.electronAPI.drive.deleteLocalForm(p).catch(() => null); } catch (e) {} return showNotification('No valid forms', 'No forms prepared for export', 'error'); }
+        try { hideSpinner(); } catch (e) {}
+        const res = await window.electronAPI.exportFormsPdf(wrappers, { year: String(now.getFullYear()), baseName: 'forms_today', saveToDocuments: true });
+        if (res && res.ok) {
+          // auto-open the saved PDF in folder if possible
+          try { if (window.electronAPI && typeof window.electronAPI.revealInFolder === 'function') await window.electronAPI.revealInFolder(res.pdfPath); } catch (e) { console.warn('revealInFolder failed', e); }
+          showNotification('Export saved', 'Saved to Documents', 'success');
+          try { for (const p of tempPaths) await window.electronAPI.drive.deleteLocalForm(p).catch(() => null); } catch (e) {}
+        } else {
+          showNotification('Export failed', (res && res.error) ? res.error : 'Unknown error', 'error');
+          try { for (const p of tempPaths) await window.electronAPI.drive.deleteLocalForm(p).catch(() => null); } catch (e) {}
+        }
+      } catch (e) { console.warn('exportTodayBtn failed', e); showNotification('Export failed', String(e), 'error'); }
+      finally { try { hideSpinner(); } catch (e) {} }
+    });
+    todayActions.appendChild(exportTodayBtn);
     // Compose today card
     today.appendChild(todayHeader);
     today.appendChild(todayVal);
     today.appendChild(todayActions);
     // Make the whole card clickable as well
     try { today.style.cursor = 'pointer'; } catch (e) {}
-    try { today.addEventListener('click', () => { try { showTodayFormsModal(); } catch (e) { console.warn('showTodayFormsModal failed', e); } }); } catch (e) {}
+    try { today.addEventListener('click', () => { try { if (!isFeatureEnabled('openToday')) { showTrialExpiredModal('Open Today'); return; } showTodayFormsModal(); } catch (e) { console.warn('showTodayFormsModal failed', e); } }); } catch (e) {}
 
     const connect = document.createElement('div');
     connect.className = 'statCard connectCard';
@@ -569,9 +850,200 @@ function renderStatsCards(entries) {
     connect.appendChild(connTitle); connect.appendChild(connHint); connect.appendChild(connBtn);
 
     statsRow.appendChild(total); statsRow.appendChild(today); statsRow.appendChild(connect);
-
+    
     // insert statsRow at the top of center
     center.insertBefore(statsRow, center.firstChild);
+
+    // Extra row: smaller Dropbox-powered cards (Signed-in user, Storage)
+    try {
+      // remove any previously inserted extra rows to avoid duplicates
+      try {
+        const prev = center.querySelectorAll && center.querySelectorAll('.statsRowExtra');
+        if (prev && prev.length) Array.from(prev).forEach(n => { try { n.parentNode && n.parentNode.removeChild(n); } catch (e) {} });
+      } catch (e) {}
+      const extraRow = document.createElement('div');
+      extraRow.className = 'statsRowExtra';
+      extraRow.style.display = 'flex';
+      extraRow.style.gap = '16px';
+      extraRow.style.justifyContent = 'center';
+      extraRow.style.marginTop = '12px';
+
+      const userCard = document.createElement('div');
+      userCard.className = 'statCard small userCard';
+      userCard.style.minWidth = '220px';
+      userCard.style.maxWidth = '260px';
+      userCard.innerHTML = `
+        <div style="display:flex;gap:12px;align-items:center;width:100%">
+          <img class="cardBadge" src="../assets/image.png" />
+          <img class="statAvatar" src="" style="width:48px;height:48px;border-radius:50%;object-fit:cover;border:2px solid rgba(255,255,255,0.06)"/>
+          <div style="flex:1;min-width:0">
+            <div class="statHeader">Signed in as</div>
+            <div class="statValue smallName">Not signed in</div>
+            <div class="statLabel smallMuted">—</div>
+          </div>
+        </div>
+      `;
+
+      const storageCard = document.createElement('div');
+      storageCard.className = 'statCard small storageCard';
+      storageCard.style.minWidth = '220px';
+      storageCard.style.maxWidth = '260px';
+      storageCard.innerHTML = `
+        <div style="width:100%">
+          <img class="cardBadge" src="../assets/image.png" />
+          <div class="statHeader">Dropbox storage</div>
+          <div class="statValue storageNumbers">—</div>
+          <div class="storageProgress" style="width:100%;max-width:200px;height:12px;background:rgba(255,255,255,0.06);border-radius:8px;overflow:hidden;margin-top:8px">
+            <div class="storageFill" style="width:0%;height:100%;background:linear-gradient(90deg,#1ea7ff,#6f5cff)"></div>
+          </div>
+          <div style="margin-top:10px;display:flex;gap:8px;justify-content:flex-end">
+            <button class="glowBtn" id="manageStorageBtn" style="padding:8px 12px;font-size:13px">Manage</button>
+          </div>
+        </div>
+      `;
+
+      extraRow.appendChild(userCard);
+      extraRow.appendChild(storageCard);
+      // Batch Export card: reuse year selection to open year forms modal for batch actions
+      try {
+        const batchCard = document.createElement('div');
+        batchCard.className = 'statCard small batchExportCard';
+        batchCard.style.minWidth = '220px';
+        batchCard.style.maxWidth = '260px';
+        batchCard.innerHTML = `
+          <div style="width:100%">
+            <img class="cardBadge" src="../assets/image.png" />
+            <div class="statHeader">Batch export</div>
+            <div class="statValue">Export multiple forms</div>
+            <div style="margin-top:8px;font-size:12px;color:var(--text-muted)">Select a year to open and choose forms</div>
+            <div style="margin-top:10px;display:flex;gap:8px;justify-content:flex-end">
+              <button class="glowBtn" id="batchExportBtn" style="padding:8px 12px;font-size:13px">Batch Export</button>
+            </div>
+          </div>
+        `;
+        extraRow.appendChild(batchCard);
+        // make entire card surface clickable and wire the internal button
+        try {
+          batchCard.style.cursor = 'pointer';
+          batchCard.style.pointerEvents = 'auto';
+          batchCard.addEventListener('click', (ev) => {
+            try {
+              // if user clicked a control inside the card (like a button), let that event run normally
+              // but if they clicked the card surface, open the year picker
+              showBatchYearPicker(currentEntries || []);
+            } catch (e) { console.warn('batchCard click failed', e); }
+          });
+          const b = batchCard.querySelector('#batchExportBtn');
+          if (b) {
+            b.addEventListener('click', (ev) => {
+              try { ev.stopPropagation(); showBatchYearPicker(currentEntries || []); } catch (e) { console.warn('batchExport button failed', e); }
+            });
+          }
+        } catch (e) { console.warn('batchExport wiring failed', e); }
+      } catch (e) { console.warn('creating batch export card failed', e); }
+      // Prefer inserting the extraRow into the explicit extra-cards area
+      // (replaces legacy filters). If that area isn't present, fall back
+      // to the previous insert-before-display absolute overlay behavior.
+      try {
+        const extraHost = document.getElementById('extraCardsArea');
+        if (extraHost) {
+          // remove duplicates inside the host
+          try { const prev = extraHost.querySelectorAll && extraHost.querySelectorAll('.statsRowExtra'); if (prev && prev.length) Array.from(prev).forEach(n => { try { n.parentNode && n.parentNode.removeChild(n); } catch (e) {} }); } catch (e) {}
+          extraRow.style.position = 'relative';
+          extraRow.style.marginTop = '';
+          extraRow.style.left = '';
+          extraRow.style.transform = '';
+          extraRow.style.zIndex = '';
+          extraRow.style.pointerEvents = 'auto';
+          extraHost.appendChild(extraRow);
+        } else {
+          const displayEl = document.getElementById('displayContainer') || center;
+          const host = (displayEl && displayEl.parentNode) ? displayEl.parentNode : center;
+          // ensure host is positioned so absolute child can align to it
+          try { const cs = window.getComputedStyle(host); if (cs && cs.position === 'static') host.style.position = 'relative'; } catch (e) {}
+          host.insertBefore(extraRow, displayEl);
+          // After insertion, measure and position absolutely centered above the display
+          requestAnimationFrame(() => {
+            try {
+              extraRow.style.position = 'absolute';
+              extraRow.style.left = '50%';
+              extraRow.style.transform = 'translateX(-50%)';
+              extraRow.style.zIndex = '12000';
+              extraRow.style.pointerEvents = 'auto';
+              // place it slightly overlapping the top of displayEl
+              const hostRect = host.getBoundingClientRect();
+              const dispRect = displayEl.getBoundingClientRect();
+              const extraH = extraRow.offsetHeight || 72;
+              // target top relative to host: a little above display top
+              const top = Math.max(8, (dispRect.top - hostRect.top) - (extraH / 2));
+              extraRow.style.top = top + 'px';
+            } catch (e) { /* ignore positioning errors */ }
+          });
+        }
+      } catch (e) { try { center.appendChild(extraRow); } catch (ex) {} }
+
+      // Async populate user & storage info
+      (async () => {
+        try {
+          // account info
+          try {
+            const acc = await (window.electronAPI && window.electronAPI.drive && typeof window.electronAPI.drive.getAccount === 'function' ? window.electronAPI.drive.getAccount() : Promise.resolve(null));
+            if (acc && acc.ok && acc.info) {
+              const info = acc.info;
+              const name = (info.name && info.name.display_name) ? info.name.display_name : (info.email || 'User');
+              const email = info.email || '';
+              const avatarImg = userCard.querySelector('img.statAvatar');
+              const nameEl = userCard.querySelector('.smallName');
+              const labelEl = userCard.querySelector('.statLabel');
+              if (avatarImg && info.profile_photo_url) avatarImg.src = info.profile_photo_url; else if (avatarImg) avatarImg.style.display = 'none';
+              if (nameEl) nameEl.innerText = name;
+              if (labelEl) labelEl.innerText = email;
+            }
+          } catch (e) { /* ignore account fetch failures */ }
+
+          // storage info (debug/quota)
+          try {
+            const dbg = await (window.electronAPI && window.electronAPI.drive && typeof window.electronAPI.drive.getDebug === 'function' ? window.electronAPI.drive.getDebug() : Promise.resolve(null));
+            let used = 0, total = 0;
+            if (dbg && dbg.ok && dbg.info) {
+              const info = dbg.info;
+              if (info.quota) {
+                used = info.quota.used_bytes || info.quota.used || 0;
+                total = (info.quota.allocation && (info.quota.allocation.allocated_bytes || info.quota.allocation)) || info.quota.allocated_bytes || 0;
+              } else if (info.usage) {
+                used = info.usage.used || info.usage.used_bytes || 0;
+                total = info.usage.total || 0;
+              } else if (typeof info.space_used !== 'undefined') {
+                used = info.space_used || 0; total = info.space_total || 0;
+              }
+            }
+            if (total > 0) {
+              const pct = Math.max(0, Math.min(100, Math.round((used / total) * 100)));
+              const formatStorage = (bytes) => {
+                try {
+                  const gb = bytes / 1024 / 1024 / 1024;
+                  if (gb >= 1) return gb.toFixed(1) + ' GB';
+                  const mb = bytes / 1024 / 1024;
+                  return mb.toFixed(1) + ' MB';
+                } catch (e) { return '0.0 GB'; }
+              };
+              const numbers = storageCard.querySelector('.storageNumbers');
+              const fill = storageCard.querySelector('.storageFill');
+              if (numbers) numbers.innerText = `${formatStorage(used)} / ${formatStorage(total)}`;
+              if (fill) fill.style.width = pct + '%';
+            } else {
+              const numbers = storageCard.querySelector('.storageNumbers'); if (numbers) numbers.innerText = 'Unknown';
+            }
+          } catch (e) { /* ignore storage fetch failures */ }
+
+          // Manage button opens existing manage modal if available
+          try {
+            const mbtn = document.getElementById('manageStorageBtn');
+            if (mbtn) mbtn.addEventListener('click', () => { try { if (typeof showManageConnectionModal === 'function') return showManageConnectionModal(); if (window.electronAPI && typeof window.electronAPI.revealInFolder === 'function') window.electronAPI.revealInFolder(''); } catch (e) {} });
+          } catch (e) {}
+        } catch (e) { /* overall extraRow population error */ }
+      })();
+    } catch (e) { console.warn('extra stats row creation failed', e); }
   } catch (e) { console.warn('renderStatsCards failed', e); }
 }
 
@@ -676,9 +1148,11 @@ async function checkExistingSignIn() {
       try {
         const acc = await window.electronAPI.drive.getAccount();
         if (acc && acc.ok && acc.info) showAccount(acc.info);
+        try { updateExtraCards(); } catch (e) {}
       } catch (e) { console.warn('failed to get account', e); }
       await loadDropboxFiles();
       try { updateDropboxStatus(true); } catch (e) {}
+      try { updateExtraCards(); } catch (e) {}
       try { setConnectLoading(false); } catch (e) {}
     }
     else {
@@ -961,7 +1435,30 @@ async function openEntryModal(entry) {
           } catch (e) {}
           const res = await window.electronAPI.exportFormPdf(wrapped, { saveToDocuments: true });
           if (res && res.ok) {
-            showNotification('Export saved', 'Saved PDF to: ' + res.pdfPath, 'success');
+            try {
+              const overlay = document.createElement('div'); overlay.className = 'modalOverlay';
+              // ensure overlay is full-screen and above everything (use important)
+              overlay.style.position = 'fixed'; overlay.style.inset = '0'; overlay.style.background = 'rgba(0,0,0,0.35)';
+              overlay.style.display = 'flex'; overlay.style.alignItems = 'center'; overlay.style.justifyContent = 'center';
+              overlay.style.setProperty('z-index', '61000', 'important');
+
+              const box = document.createElement('div'); box.className = 'modalBox';
+              box.style.position = 'relative'; box.style.minWidth = '320px'; box.style.maxWidth = '80%'; box.style.background = '#fff';
+              box.style.padding = '14px'; box.style.borderRadius = '10px'; box.style.boxShadow = '0 12px 40px rgba(0,0,0,0.25)';
+              box.style.setProperty('z-index', '61001', 'important');
+
+              const h = document.createElement('div'); h.style.fontWeight = '800'; h.style.marginBottom = '8px'; h.innerText = 'Export saved';
+              const p = document.createElement('div'); p.innerText = 'Saved to Documents'; p.title = res.pdfPath || '';
+              const actions = document.createElement('div'); actions.className = 'modalActions'; actions.style.display = 'flex'; actions.style.gap = '8px'; actions.style.marginTop = '12px';
+              const go = document.createElement('button'); go.innerText = 'Go'; go.addEventListener('click', async () => {
+                try { if (window.electronAPI && typeof window.electronAPI.revealInFolder === 'function') { await window.electronAPI.revealInFolder(res.pdfPath); } else { console.warn('revealInFolder not available'); } } catch (e) { console.warn('revealInFolder failed', e); }
+              });
+              const ok = document.createElement('button'); ok.innerText = 'OK'; ok.addEventListener('click', () => { try { document.body.removeChild(overlay); } catch (e) {} });
+              actions.appendChild(go); actions.appendChild(ok);
+              box.appendChild(h); box.appendChild(p); box.appendChild(actions); overlay.appendChild(box); document.body.appendChild(overlay);
+            } catch (e) {
+              showNotification('Export saved', 'Saved PDF to: ' + res.pdfPath, 'success');
+            }
             return;
           }
           throw new Error(res && res.error ? res.error : 'exportFormPdf failed');
@@ -1315,52 +1812,28 @@ function payloadToHtml(payload, title) {
 // Derive a friendly display name for an entry or payload
 function getFriendlyTitle(entry, wrapped) {
   try {
-    // Prefer explicit title fields
+    // Minimal approach: prefer explicit title fields, otherwise
+    // take the filename/path and remove the first 25 characters.
     if (entry && entry.title) return String(entry.title);
     if (wrapped && wrapped.payload) {
       const p = wrapped.payload;
       if (p.title) return String(p.title);
       if (p.name) return String(p.name);
-      if (p.metadata && p.metadata.subject) return String(p.metadata.subject);
     }
-    // Try entry.meta.payload if present
-    if (entry && entry.meta && entry.meta.payload) {
-      const p = entry.meta.payload;
-      if (p.title) return String(p.title);
-      if (p.name) return String(p.name);
-    }
-    // Fallback: derive from filename/path. Aim to return Dropbox-style title
+    // Derive from filename/path and perform only the simple slice
     const src = (entry && (entry.name || entry.path_lower)) || '';
-    // strip first 25 characters as a heuristic to remove repeated app tokens
-    let rawName = String(src || '').replace(/\.json$/i, '');
-    try { if (rawName.length > 25) rawName = rawName.slice(25); } catch (e) {}
-    let name = rawName;
-    // split on whitespace, underscores, dashes, dots (Dropbox filenames may use spaces)
-    const parts = name.split(/[\s_\-\.]+/g).map(p => p.trim()).filter(Boolean);
-    const blacklist = [/^checklistapp$/i, /^app$/i, /^id$/i, /^f$/i];
-    const isNoise = (t) => {
-      if (!t) return true;
-      if (/^\d{4,}$/.test(t)) return true; // long numbers/timestamps
-      if (/^[a-z0-9]{6,}$/i.test(t)) return true; // short hash-like
-      if (/^id[_\-]?[a-z0-9]+$/i.test(t)) return true;
-      for (const re of blacklist) if (re.test(t)) return true;
-      return false;
-    };
-    // collect name parts until we hit a noise token (which usually follows the real name)
-    const collected = [];
-    for (const p of parts) {
-      if (isNoise(p)) break;
-      collected.push(p);
-    }
-    let s = (collected.length ? collected.join(' ') : name.replace(/[_\-\.]+/g, ' ')).trim();
-    // If result still contains trailing noise like numeric ids, strip them
-    s = s.replace(/[_\- ]?(id[_\-]?[a-z0-9]+)$/i, '');
-    s = s.replace(/[_\- ]?\d{6,}$/g, '');
-    s = s.replace(/\s+/g, ' ').trim();
-    if (!s) return 'Form';
-    // Preserve original capitalization if it looks human; otherwise Title Case
-    if (/[A-Z]/.test(s) && s === s.trim()) return s;
-    return s.split(' ').map(w => w.length ? (w[0].toUpperCase() + w.slice(1).toLowerCase()) : '').join(' ');
+    let raw = String(src || '').replace(/\.json$/i, '');
+    try {
+      if (raw.length > 25) raw = raw.slice(25);
+    } catch (e) {}
+    // Trim common leading separators and whitespace
+    raw = raw.replace(/^[_\-\.\s]+/, '').trim();
+    // If there's an underscore, cut everything starting at the first underscore
+    try {
+      const u = raw.indexOf('_');
+      if (u >= 0) raw = raw.slice(0, u).trim();
+    } catch (e) {}
+    return raw || 'Form';
   } catch (e) { return 'Form'; }
 }
 
@@ -1488,6 +1961,46 @@ function renderYearRow(entries) {
   } catch (e) { console.warn('renderYearRow error', e); }
 }
 
+// Show a lightweight year picker and forward selection to showYearFormsModal
+function showBatchYearPicker(entries) {
+  try {
+    const yearMap = {};
+    (entries || currentEntries || []).forEach(e => {
+      try {
+        if (!e || !e.server_modified) return;
+        const d = new Date(e.server_modified);
+        if (isNaN(d.getTime())) return;
+        const y = String(d.getFullYear());
+        if (!yearMap[y]) yearMap[y] = 0;
+        yearMap[y]++;
+      } catch (e) {}
+    });
+    const years = Object.keys(yearMap).sort((a,b) => Number(b) - Number(a));
+    const overlay = document.createElement('div'); overlay.className = 'modalOverlay'; overlay.style.zIndex = 32000;
+    const box = document.createElement('div'); box.className = 'modalBox'; box.style.minWidth = '360px'; box.style.maxWidth = '80%'; box.style.padding = '12px';
+    const h = document.createElement('div'); h.style.fontWeight = '800'; h.style.marginBottom = '8px'; h.innerText = 'Batch export — choose a year';
+    const list = document.createElement('div'); list.style.display = 'flex'; list.style.flexWrap = 'wrap'; list.style.gap = '8px';
+    if (!years.length) {
+      const p = document.createElement('div'); p.className = 'placeholder'; p.innerText = 'No years available'; list.appendChild(p);
+    } else {
+      years.forEach(y => {
+        const btn = document.createElement('button'); btn.className = 'glowBtn'; btn.style.padding = '8px 12px'; btn.innerText = `${y} (${yearMap[y]} forms)`;
+        btn.addEventListener('click', (ev) => {
+          try {
+            // close picker then open year modal which allows selection of forms
+            try { document.body.removeChild(overlay); } catch (e) {}
+            showYearFormsModal(y);
+          } catch (e) { console.warn('year pick failed', e); }
+        });
+        list.appendChild(btn);
+      });
+    }
+    const close = document.createElement('button'); close.innerText = 'Close'; close.style.marginTop = '12px'; close.addEventListener('click', () => { try { document.body.removeChild(overlay); } catch (e) {} });
+    box.appendChild(h); box.appendChild(list); box.appendChild(close); overlay.appendChild(box); document.body.appendChild(overlay);
+    overlay.addEventListener('click', (ev) => { if (ev.target === overlay) try { document.body.removeChild(overlay); } catch (e) {} });
+  } catch (e) { console.warn('showBatchYearPicker failed', e); }
+}
+
 // Show a modal listing files for a year (on-demand). Uses temporary links for preview (no download/persist).
 function showYearFormsModal(year) {
   try {
@@ -1548,7 +2061,16 @@ function showYearFormsModal(year) {
 
     const listWrapper = document.createElement('div'); listWrapper.style.display = 'flex'; listWrapper.style.flexDirection = 'column'; listWrapper.style.gap = '8px';
 
-    // Helper: group entries by localized day and render
+      // Batch export selection state
+      const selectedSet = new Set();
+      const MAX_BATCH = 5;
+      const exportBtn = document.createElement('button');
+      exportBtn.className = 'glowBtn'; exportBtn.innerText = 'Export Selected (0)'; exportBtn.disabled = true;
+      exportBtn.style.marginLeft = '8px';
+      // append export button into controls area (on the right)
+      try { controls.appendChild(exportBtn); } catch (e) {}
+
+      // Helper: group entries by localized day and render
     function renderGrouped(filtered) {
       listWrapper.innerHTML = '';
       if (!filtered || !filtered.length) {
@@ -1570,9 +2092,37 @@ function showYearFormsModal(year) {
       groupKeys.forEach(dateKey => {
         const heading = document.createElement('div'); heading.className = 'dateHeading'; heading.innerText = dateKey; listWrapper.appendChild(heading);
         groups[dateKey].sort((a,b) => new Date(b.server_modified) - new Date(a.server_modified)).forEach(ent => {
-          const row = document.createElement('div'); row.className = 'fileItem';
-          const left = document.createElement('div'); left.style.display = 'flex'; left.style.flexDirection = 'column';
-          const name = document.createElement('div'); name.className = 'fileName'; name.innerText = (ent && ent.name) ? ent.name : getFriendlyTitle(ent);
+            const row = document.createElement('div'); row.className = 'fileItem';
+            const left = document.createElement('div'); left.style.display = 'flex'; left.style.flexDirection = 'column';
+            // determine if this entry is a file (allow selection) or a folder (no selection)
+            const isFile = (ent && ((ent.raw && ent.raw['.tag'] === 'file') || (ent['.tag'] === 'file') || (/\.json$/i.test(ent.name || ''))));
+            let chk = null;
+            if (isFile) {
+              // checkbox for batch selection
+              chk = document.createElement('input'); chk.type = 'checkbox'; chk.className = 'batchExportCheckbox'; chk.style.marginBottom = '8px'; chk.style.alignSelf = 'flex-start'; chk._entry = ent;
+              chk.addEventListener('change', (ev) => {
+                try {
+                  if (chk.checked) {
+                    if (selectedSet.size >= MAX_BATCH) {
+                      chk.checked = false;
+                      showNotification('Selection limit', `You can select up to ${MAX_BATCH} forms`, 'error');
+                      return;
+                    }
+                    selectedSet.add(ent.path_lower || ent.id || ent.name || JSON.stringify(ent));
+                  } else {
+                    selectedSet.delete(ent.path_lower || ent.id || ent.name || JSON.stringify(ent));
+                  }
+                  exportBtn.innerText = `Export Selected (${selectedSet.size})`;
+                  exportBtn.disabled = selectedSet.size === 0;
+                } catch (e) { console.warn('batch checkbox change failed', e); }
+              });
+              left.appendChild(chk);
+            } else {
+              // placeholder to indicate non-selectable item
+              const note = document.createElement('div'); note.style.fontSize = '12px'; note.style.color = 'var(--text-muted)'; note.innerText = '(not selectable)';
+              left.appendChild(note);
+            }
+          const name = document.createElement('div'); name.className = 'fileName'; name.innerText = getFriendlyTitle(ent);
           const meta = document.createElement('div'); meta.className = 'meta'; meta.innerText = ent.server_modified ? new Date(ent.server_modified).toLocaleTimeString() : '';
           left.appendChild(name); left.appendChild(meta);
           const actions = document.createElement('div'); actions.style.display = 'flex'; actions.style.gap = '8px';
@@ -1591,6 +2141,8 @@ function showYearFormsModal(year) {
           });
 
           actions.appendChild(open);
+          const infoBtn = document.createElement('button'); infoBtn.innerText = 'Info'; infoBtn.title = 'Preview or select this file for batch export'; infoBtn.addEventListener('click', () => { try { showNotification('File', ent.name || getFriendlyTitle(ent), ''); } catch (e) {} });
+          actions.appendChild(infoBtn);
           row.appendChild(left); row.appendChild(actions);
           listWrapper.appendChild(row);
         });
@@ -1686,6 +2238,116 @@ function showYearFormsModal(year) {
     });
     clearBtn.addEventListener('click', () => { fromInput.value = ''; toInput.value = ''; infoDiv.innerText = ''; renderGrouped(entries); });
 
+    // Batch export button handler
+    exportBtn.addEventListener('click', async () => {
+      try {
+        if (!selectedSet.size) return;
+        exportBtn.disabled = true; exportBtn.innerText = 'Preparing...';
+        try { showSpinner('Preparing batch export...'); } catch (e) {}
+        const checkedInputs = Array.from(listWrapper.querySelectorAll('input.batchExportCheckbox')).filter(i => i.checked);
+        const wrappers = [];
+        const tempPaths = [];
+        const failed = [];
+        for (const inp of checkedInputs) {
+          try {
+            const entry = inp._entry;
+            if (!entry) continue;
+            // attempt to download file to temp (try multiple path hints)
+            const hints = [entry.path_lower, entry.path_display, entry.path || entry.name, entry.name];
+            let dl = null;
+            for (const h of hints) {
+              if (!h) continue;
+              try { dl = await window.electronAPI.drive.downloadToTemp(h, entry.name).catch(() => null); } catch (e) { dl = null; }
+              if (dl && dl.ok && dl.path) break;
+            }
+            if (!dl || !dl.ok || !dl.path) { failed.push({ name: entry.name, reason: 'download_failed' }); continue; }
+            tempPaths.push(dl.path);
+            const rf = await window.electronAPI.readFile(dl.path).catch(() => null);
+            if (!rf || !rf.ok) { failed.push({ name: entry.name, reason: 'read_failed' }); continue; }
+            let obj = null;
+            try { obj = JSON.parse(rf.data); } catch (e) { obj = { payload: rf.data }; }
+            const wrapper = obj.payload ? obj : { payload: obj };
+            wrapper.meta = wrapper.meta || {};
+            wrapper.meta.filePath = dl.path;
+            // include original server_modified and path hints so main can detect year
+            try { if (entry.server_modified) wrapper.meta.server_modified = entry.server_modified; } catch (e) {}
+            try { if (entry.path_lower) wrapper.meta.path_lower = entry.path_lower; } catch (e) {}
+            try { if (entry.name) wrapper.meta.name = entry.name; } catch (e) {}
+            wrappers.push(wrapper);
+          } catch (e) { console.warn('prepare wrapper failed', e); }
+        }
+        if (!wrappers.length) {
+          const names = failed.map(f => f.name).join(', ');
+          showNotification('No valid forms', `No forms prepared for export. Failed: ${names || 'none'}`, 'error');
+          // cleanup any temp files we did create
+          try { for (const p of tempPaths) await window.electronAPI.drive.deleteLocalForm(p).catch(() => null); } catch (e) {}
+          return;
+        }
+        try {
+          // Ensure the global spinner is hidden so the debug summary is visible immediately
+          try { hideSpinner(); } catch (e) {}
+          // Show a short on-screen debug summary before calling the export IPC.
+          const debugOverlay = document.createElement('div'); debugOverlay.className = 'modalOverlay'; debugOverlay.style.position = 'fixed'; debugOverlay.style.inset = '0'; debugOverlay.style.background = 'rgba(0,0,0,0.45)'; debugOverlay.style.display = 'flex'; debugOverlay.style.alignItems = 'center'; debugOverlay.style.justifyContent = 'center'; debugOverlay.style.setProperty('z-index', '65000', 'important');
+          const debugBox = document.createElement('div'); debugBox.className = 'modalBox'; debugBox.style.minWidth = '420px'; debugBox.style.maxWidth = '90%'; debugBox.style.maxHeight = '80vh'; debugBox.style.overflow = 'auto'; debugBox.style.padding = '12px'; debugBox.style.background = '#fff'; debugBox.style.borderRadius = '10px'; debugBox.style.boxShadow = '0 12px 40px rgba(0,0,0,0.25)';
+          debugBox.style.setProperty('z-index','65001','important');
+          const dh = document.createElement('div'); dh.style.fontWeight = '800'; dh.style.marginBottom = '8px'; dh.innerText = 'Batch export — debug summary';
+          const info = document.createElement('div'); info.style.color = '#475569'; info.style.fontSize = '13px'; info.style.marginBottom = '8px';
+          info.innerText = `Prepared ${wrappers.length} form${wrappers.length!==1?'s':''}. Failed downloads: ${failed.length}`;
+          const list = document.createElement('div'); list.style.maxHeight = '40vh'; list.style.overflow = 'auto'; list.style.padding = '8px 0';
+          wrappers.forEach((w, idx) => {
+            const line = document.createElement('div'); line.style.marginBottom = '6px'; line.style.fontSize = '13px';
+            const name = (w && w.meta && w.meta.name) ? w.meta.name : (w && w.payload && (w.payload.title || w.payload.name)) || `form_${idx+1}`;
+            const fp = (w && w.meta && w.meta.filePath) ? w.meta.filePath : '(no path)';
+            line.innerText = `${idx+1}. ${name} — ${fp}`;
+            list.appendChild(line);
+          });
+          if (failed && failed.length) {
+            const fhead = document.createElement('div'); fhead.style.marginTop = '8px'; fhead.style.fontWeight = '700'; fhead.innerText = 'Failed items:'; list.appendChild(fhead);
+            failed.forEach(f => { const li = document.createElement('div'); li.style.fontSize = '13px'; li.style.color = '#b91c1c'; li.innerText = `${f.name} — ${f.reason || ''}`; list.appendChild(li); });
+          }
+          const actions = document.createElement('div'); actions.style.display = 'flex'; actions.style.justifyContent = 'flex-end'; actions.style.gap = '8px'; actions.style.marginTop = '12px';
+          const cancelBtn = document.createElement('button'); cancelBtn.innerText = 'Cancel'; cancelBtn.style.padding = '8px 12px'; cancelBtn.style.border = '1px solid #e2e8f0'; cancelBtn.style.borderRadius = '8px';
+          const proceedBtn = document.createElement('button'); proceedBtn.innerText = 'Proceed'; proceedBtn.className = 'glowBtn'; proceedBtn.style.padding = '8px 12px'; proceedBtn.style.borderRadius = '8px';
+          actions.appendChild(cancelBtn); actions.appendChild(proceedBtn);
+          debugBox.appendChild(dh); debugBox.appendChild(info); debugBox.appendChild(list); debugBox.appendChild(actions); debugOverlay.appendChild(debugBox); document.body.appendChild(debugOverlay);
+
+          const userChoice = await new Promise((resolve) => {
+            cancelBtn.addEventListener('click', () => resolve('cancel'));
+            proceedBtn.addEventListener('click', () => resolve('proceed'));
+          });
+          // If user cancelled, cleanup temp files and abort
+          if (userChoice !== 'proceed') {
+            try { for (const p of tempPaths) await window.electronAPI.drive.deleteLocalForm(p).catch(() => null); } catch (e) {}
+            try { document.body.removeChild(debugOverlay); } catch (e) {}
+            try { hideSpinner(); } catch (e) {}
+            exportBtn.disabled = false; exportBtn.innerText = `Export Selected (0)`; selectedSet.clear(); Array.from(listWrapper.querySelectorAll('input.batchExportCheckbox')).forEach(i => i.checked = false);
+            return;
+          }
+          // proceed: remove overlay and call export IPC
+          try { document.body.removeChild(debugOverlay); } catch (e) {}
+          const res = await window.electronAPI.exportFormsPdf(wrappers, { year: year, baseName: 'forms', saveToDocuments: true, max: MAX_BATCH });
+          if (res && res.ok) {
+            try {
+              const overlay = document.createElement('div'); overlay.className = 'modalOverlay'; overlay.style.position = 'fixed'; overlay.style.inset = '0'; overlay.style.background = 'rgba(0,0,0,0.35)'; overlay.style.display = 'flex'; overlay.style.alignItems = 'center'; overlay.style.justifyContent = 'center'; overlay.style.setProperty('z-index', '61000', 'important');
+              const box = document.createElement('div'); box.className = 'modalBox'; box.style.position = 'relative'; box.style.minWidth = '320px'; box.style.maxWidth = '80%'; box.style.background = '#fff'; box.style.padding = '14px'; box.style.borderRadius = '10px'; box.style.boxShadow = '0 12px 40px rgba(0,0,0,0.25)'; box.style.setProperty('z-index', '61001', 'important');
+              const h = document.createElement('div'); h.style.fontWeight = '800'; h.style.marginBottom = '8px'; h.innerText = 'Export saved';
+              const p = document.createElement('div'); p.innerText = 'Saved to Documents'; p.title = res.pdfPath || '';
+              const actions2 = document.createElement('div'); actions2.className = 'modalActions'; actions2.style.display = 'flex'; actions2.style.gap = '8px'; actions2.style.marginTop = '12px';
+              const go = document.createElement('button'); go.innerText = 'Go'; go.addEventListener('click', async () => { try { if (window.electronAPI && typeof window.electronAPI.revealInFolder === 'function') { await window.electronAPI.revealInFolder(res.pdfPath); } } catch (e) { console.warn('revealInFolder failed', e); } });
+              const ok = document.createElement('button'); ok.innerText = 'OK'; ok.addEventListener('click', () => { try { document.body.removeChild(overlay); } catch (e) {} });
+              actions2.appendChild(go); actions2.appendChild(ok); box.appendChild(h); box.appendChild(p); box.appendChild(actions2); overlay.appendChild(box); document.body.appendChild(overlay);
+            } catch (e) { showNotification('Export saved', `Saved PDF to: ${res.pdfPath}`, 'success'); }
+            // cleanup temp files
+            try { for (const p of tempPaths) await window.electronAPI.drive.deleteLocalForm(p).catch(() => null); } catch (e) {}
+          } else {
+            showNotification('Export failed', (res && res.error) ? res.error : 'Unknown error', 'error');
+            try { for (const p of tempPaths) await window.electronAPI.drive.deleteLocalForm(p).catch(() => null); } catch (e) {}
+          }
+        } catch (e) { showNotification('Export failed', String(e), 'error'); }
+        try { hideSpinner(); } catch (e) {}
+      } catch (e) { console.warn('batch export failed', e); showNotification('Export failed', String(e), 'error'); }
+      finally { exportBtn.disabled = false; exportBtn.innerText = `Export Selected (0)`; selectedSet.clear(); Array.from(listWrapper.querySelectorAll('input.batchExportCheckbox')).forEach(i => i.checked = false); }
+    });
     // initial render
     box.appendChild(h); box.appendChild(controls); box.appendChild(listWrapper);
     renderGrouped(entries);
@@ -1708,6 +2370,89 @@ function showYearFormsModal(year) {
     overlay.appendChild(box); document.body.appendChild(overlay);
     overlay.addEventListener('click', (ev) => { if (ev.target === overlay) try { document.body.removeChild(overlay); } catch (e) {} });
   } catch (e) { console.warn('showYearFormsModal failed', e); showNotification('Error', String(e), 'error'); }
+
+  // Shared helper: prepare selected checkboxes in a listWrapper and export them as a combined PDF
+  async function exportSelectedFromList(listWrapper, exportBtn, selectedSet, year, baseName, max) {
+    try {
+      if (!isFeatureEnabled('batchExport')) { showTrialExpiredModal('Batch export'); return; }
+      if (!listWrapper) return;
+      const checkedInputs = Array.from(listWrapper.querySelectorAll('input.batchExportCheckbox')).filter(i => i.checked);
+      if (!checkedInputs.length) return;
+      exportBtn.disabled = true; exportBtn.innerText = 'Preparing...';
+      try { showSpinner('Preparing batch export...'); } catch (e) {}
+      const wrappers = [];
+      const tempPaths = [];
+      const failed = [];
+      for (const inp of checkedInputs) {
+        try {
+          const entry = inp._entry;
+          if (!entry) continue;
+          const hints = [entry.path_lower, entry.path_display, entry.path || entry.name, entry.name];
+          let dl = null;
+          for (const h of hints) {
+            if (!h) continue;
+            try { dl = await window.electronAPI.drive.downloadToTemp(h, entry.name).catch(() => null); } catch (e) { dl = null; }
+            if (dl && dl.ok && dl.path) break;
+          }
+          if (!dl || !dl.ok || !dl.path) { failed.push({ name: entry.name, reason: 'download_failed' }); continue; }
+          tempPaths.push(dl.path);
+          const rf = await window.electronAPI.readFile(dl.path).catch(() => null);
+          if (!rf || !rf.ok) { failed.push({ name: entry.name, reason: 'read_failed' }); continue; }
+          let obj = null; try { obj = JSON.parse(rf.data); } catch (e) { obj = { payload: rf.data }; }
+          const wrapper = obj.payload ? obj : { payload: obj };
+          wrapper.meta = wrapper.meta || {};
+          wrapper.meta.filePath = dl.path;
+          try { if (entry.server_modified) wrapper.meta.server_modified = entry.server_modified; } catch (e) {}
+          try { if (entry.path_lower) wrapper.meta.path_lower = entry.path_lower; } catch (e) {}
+          try { if (entry.name) wrapper.meta.name = entry.name; } catch (e) {}
+          wrappers.push(wrapper);
+        } catch (e) { console.warn('prepare wrapper failed', e); }
+      }
+      if (!wrappers.length) {
+        const names = failed.map(f => f.name).join(', ');
+        showNotification('No valid forms', `No forms prepared for export. Failed: ${names || 'none'}`, 'error');
+        try { for (const p of tempPaths) await window.electronAPI.drive.deleteLocalForm(p).catch(() => null); } catch (e) {}
+        return;
+      }
+      try { hideSpinner(); } catch (e) {}
+      // debug overlay
+      const debugOverlay = document.createElement('div'); debugOverlay.className = 'modalOverlay'; debugOverlay.style.position = 'fixed'; debugOverlay.style.inset = '0'; debugOverlay.style.background = 'rgba(0,0,0,0.45)'; debugOverlay.style.display = 'flex'; debugOverlay.style.alignItems = 'center'; debugOverlay.style.justifyContent = 'center'; debugOverlay.style.setProperty('z-index', '65000', 'important');
+      const debugBox = document.createElement('div'); debugBox.className = 'modalBox'; debugBox.style.minWidth = '420px'; debugBox.style.maxWidth = '90%'; debugBox.style.maxHeight = '80vh'; debugBox.style.overflow = 'auto'; debugBox.style.padding = '12px'; debugBox.style.background = '#fff'; debugBox.style.borderRadius = '10px'; debugBox.style.boxShadow = '0 12px 40px rgba(0,0,0,0.25)'; debugBox.style.setProperty('z-index','65001','important');
+      const dh = document.createElement('div'); dh.style.fontWeight = '800'; dh.style.marginBottom = '8px'; dh.innerText = 'Batch export — debug summary';
+      const info = document.createElement('div'); info.style.color = '#475569'; info.style.fontSize = '13px'; info.style.marginBottom = '8px';
+      info.innerText = `Prepared ${wrappers.length} form${wrappers.length!==1?'s':''}. Failed downloads: ${failed.length}`;
+      const list = document.createElement('div'); list.style.maxHeight = '40vh'; list.style.overflow = 'auto'; list.style.padding = '8px 0';
+      wrappers.forEach((w, idx) => { const line = document.createElement('div'); line.style.marginBottom = '6px'; line.style.fontSize = '13px'; const name = (w && w.meta && w.meta.name) ? w.meta.name : (w && w.payload && (w.payload.title || w.payload.name)) || `form_${idx+1}`; const fp = (w && w.meta && w.meta.filePath) ? w.meta.filePath : '(no path)'; line.innerText = `${idx+1}. ${name} — ${fp}`; list.appendChild(line); });
+      if (failed && failed.length) { const fhead = document.createElement('div'); fhead.style.marginTop = '8px'; fhead.style.fontWeight = '700'; fhead.innerText = 'Failed items:'; list.appendChild(fhead); failed.forEach(f => { const li = document.createElement('div'); li.style.fontSize = '13px'; li.style.color = '#b91c1c'; li.innerText = `${f.name} — ${f.reason || ''}`; list.appendChild(li); }); }
+      const actions = document.createElement('div'); actions.style.display = 'flex'; actions.style.justifyContent = 'flex-end'; actions.style.gap = '8px'; actions.style.marginTop = '12px';
+      const cancelBtn = document.createElement('button'); cancelBtn.innerText = 'Cancel'; cancelBtn.style.padding = '8px 12px'; cancelBtn.style.border = '1px solid #e2e8f0'; cancelBtn.style.borderRadius = '8px';
+      const proceedBtn = document.createElement('button'); proceedBtn.innerText = 'Proceed'; proceedBtn.className = 'glowBtn'; proceedBtn.style.padding = '8px 12px'; proceedBtn.style.borderRadius = '8px';
+      actions.appendChild(cancelBtn); actions.appendChild(proceedBtn);
+      debugBox.appendChild(dh); debugBox.appendChild(info); debugBox.appendChild(list); debugBox.appendChild(actions); debugOverlay.appendChild(debugBox); document.body.appendChild(debugOverlay);
+      const userChoice = await new Promise((resolve) => { cancelBtn.addEventListener('click', () => resolve('cancel')); proceedBtn.addEventListener('click', () => resolve('proceed')); });
+      if (userChoice !== 'proceed') { try { for (const p of tempPaths) await window.electronAPI.drive.deleteLocalForm(p).catch(() => null); } catch (e) {} try { document.body.removeChild(debugOverlay); } catch (e) {} try { hideSpinner(); } catch (e) {} exportBtn.disabled = false; exportBtn.innerText = `Export Selected (0)`; selectedSet.clear(); Array.from(listWrapper.querySelectorAll('input.batchExportCheckbox')).forEach(i => i.checked = false); return; }
+      try { document.body.removeChild(debugOverlay); } catch (e) {}
+      const res = await window.electronAPI.exportFormsPdf(wrappers, { year: year, baseName: baseName || 'forms', saveToDocuments: true, max: max || 5 });
+      if (res && res.ok) {
+        try {
+          const overlay = document.createElement('div'); overlay.className = 'modalOverlay'; overlay.style.position = 'fixed'; overlay.style.inset = '0'; overlay.style.background = 'rgba(0,0,0,0.35)'; overlay.style.display = 'flex'; overlay.style.alignItems = 'center'; overlay.style.justifyContent = 'center'; overlay.style.setProperty('z-index', '61000', 'important');
+          const box = document.createElement('div'); box.className = 'modalBox'; box.style.position = 'relative'; box.style.minWidth = '320px'; box.style.maxWidth = '80%'; box.style.background = '#fff'; box.style.padding = '14px'; box.style.borderRadius = '10px'; box.style.boxShadow = '0 12px 40px rgba(0,0,0,0.25)'; box.style.setProperty('z-index', '61001', 'important');
+          const h = document.createElement('div'); h.style.fontWeight = '800'; h.style.marginBottom = '8px'; h.innerText = 'Export saved';
+          const p = document.createElement('div'); p.innerText = 'Saved to Documents'; p.title = res.pdfPath || '';
+          const actions2 = document.createElement('div'); actions2.className = 'modalActions'; actions2.style.display = 'flex'; actions2.style.gap = '8px'; actions2.style.marginTop = '12px';
+          const go = document.createElement('button'); go.innerText = 'Go'; go.addEventListener('click', async () => { try { if (window.electronAPI && typeof window.electronAPI.revealInFolder === 'function') { await window.electronAPI.revealInFolder(res.pdfPath); } } catch (e) { console.warn('revealInFolder failed', e); } });
+          const ok = document.createElement('button'); ok.innerText = 'OK'; ok.addEventListener('click', () => { try { document.body.removeChild(overlay); } catch (e) {} });
+          actions2.appendChild(go); actions2.appendChild(ok); box.appendChild(h); box.appendChild(p); box.appendChild(actions2); overlay.appendChild(box); document.body.appendChild(overlay);
+        } catch (e) { showNotification('Export saved', `Saved PDF to: ${res.pdfPath}`, 'success'); }
+        try { for (const p of tempPaths) await window.electronAPI.drive.deleteLocalForm(p).catch(() => null); } catch (e) {}
+      } else {
+        showNotification('Export failed', (res && res.error) ? res.error : 'Unknown error', 'error');
+        try { for (const p of tempPaths) await window.electronAPI.drive.deleteLocalForm(p).catch(() => null); } catch (e) {}
+      }
+      try { hideSpinner(); } catch (e) {}
+    } catch (e) { console.warn('exportSelectedFromList failed', e); showNotification('Export failed', String(e), 'error'); }
+    finally { try { exportBtn.disabled = false; exportBtn.innerText = `Export Selected (0)`; selectedSet.clear(); Array.from(listWrapper.querySelectorAll('input.batchExportCheckbox')).forEach(i => i.checked = false); } catch (e) {} }
+  }
 }
 
 // Show modal listing Dropbox forms saved today
@@ -1748,7 +2493,7 @@ function showTodayFormsModal() {
           groups[timeKey].forEach(ent => {
             const row = document.createElement('div'); row.className = 'fileItem';
             const left = document.createElement('div'); left.style.display = 'flex'; left.style.flexDirection = 'column';
-            const name = document.createElement('div'); name.className = 'fileName'; name.innerText = (ent && ent.name) ? ent.name : getFriendlyTitle(ent);
+            const name = document.createElement('div'); name.className = 'fileName'; name.innerText = getFriendlyTitle(ent);
             const meta = document.createElement('div'); meta.className = 'meta'; meta.innerText = ent.server_modified ? new Date(ent.server_modified).toLocaleTimeString() : '';
             left.appendChild(name); left.appendChild(meta);
             const actions = document.createElement('div'); actions.style.display = 'flex'; actions.style.gap = '8px';
@@ -1769,7 +2514,15 @@ function showTodayFormsModal() {
       } catch (e) { console.warn('renderGrouped (today) failed', e); }
     }
 
-    box.appendChild(h); box.appendChild(listWrapper); renderGrouped(entries);
+    // Batch export controls for today's modal (reuse shared helper)
+    const selectedSet = new Set();
+    const MAX_BATCH = 5;
+    const controls = document.createElement('div'); controls.style.display = 'flex'; controls.style.justifyContent = 'flex-end'; controls.style.marginBottom = '8px';
+    const exportBtn = document.createElement('button'); exportBtn.className = 'glowBtn'; exportBtn.innerText = 'Export Selected (0)'; exportBtn.disabled = true; exportBtn.style.marginLeft = '8px';
+    try { controls.appendChild(exportBtn); } catch (e) {}
+    box.appendChild(h); box.appendChild(controls); box.appendChild(listWrapper); renderGrouped(entries);
+    // wire exportBtn to shared helper
+    exportBtn.addEventListener('click', async () => { try { await exportSelectedFromList(listWrapper, exportBtn, selectedSet, String(now.getFullYear()), 'forms_today', MAX_BATCH); } catch (e) { console.warn('today export failed', e); } });
     const close = document.createElement('button'); close.innerText = 'Close';
     try { close.style.position = 'absolute'; close.style.top = '10px'; close.style.right = '12px'; close.style.zIndex = '30100'; close.style.background = '#ffecec'; close.style.color = '#b91c1c'; close.style.border = '1px solid #f5c6c6'; close.style.padding = '8px 10px'; close.style.borderRadius = '8px'; close.style.cursor = 'pointer'; } catch (e) {}
     close.addEventListener('click', (ev) => { ev.stopPropagation(); try { document.body.removeChild(overlay); } catch (e) {} });
@@ -1833,7 +2586,7 @@ async function openRemotePreview(entry) {
     if (!res || !res.ok || !res.link) return showNotification('Preview failed', (res && res.error) || 'No temporary link', 'error');
     const overlay = document.createElement('div'); overlay.className = 'modalOverlay'; overlay.style.zIndex = 32000;
     const box = document.createElement('div'); box.className = 'modalBox'; box.style.width = '1000px'; box.style.maxHeight = '90vh'; box.style.padding = '8px'; box.style.position = 'relative';
-    const title = document.createElement('div'); title.style.fontWeight = '800'; title.style.marginBottom = '8px'; title.innerText = entry.name || entry.path_lower;
+    const title = document.createElement('div'); title.style.fontWeight = '800'; title.style.marginBottom = '8px'; title.innerText = getFriendlyTitle(entry || {});
     const frame = document.createElement('iframe'); frame.style.width = '100%'; frame.style.height = '70vh'; frame.style.border = '0'; frame.src = res.link;
     const close = document.createElement('button'); close.innerText = 'Close';
     try { close.style.position = 'absolute'; close.style.top = '10px'; close.style.right = '12px'; close.style.zIndex = '32100'; } catch (e) {}
@@ -1856,12 +2609,26 @@ function showAccount(info) {
     const name = document.getElementById('userName');
     const email = document.getElementById('userEmail');
     const avatar = document.getElementById('userAvatar');
-    if (!ui || !name || !email) return;
-    name.innerText = info.name && info.name.display_name ? info.name.display_name : (info.email || 'Dropbox User');
-    email.innerText = info.email || '';
-    if (info.profile_photo_url) avatar.src = info.profile_photo_url; else avatar.style.display = 'none';
-    ui.style.display = 'flex';
-    connectBtn.innerText = 'Connected';
+    // Populate the top-right userInfo only for legacy layouts if needed,
+    // but prefer to show account details in the Signed in as card.
+    try {
+      const userCard = document.querySelector('.userCard');
+      if (userCard) {
+        const avatarImg = userCard.querySelector('img.statAvatar');
+        const nameEl = userCard.querySelector('.smallName');
+        const labelEl = userCard.querySelector('.statLabel');
+        const displayName = info.name && info.name.display_name ? info.name.display_name : (info.email || 'Dropbox User');
+        try { if (avatarImg && info.profile_photo_url) avatarImg.src = info.profile_photo_url; else if (avatarImg) avatarImg.style.display = 'none'; } catch (e) {}
+        try { if (nameEl) nameEl.innerText = displayName; } catch (e) {}
+        try { if (labelEl) labelEl.innerText = info.email || ''; } catch (e) {}
+      }
+    } catch (e) {}
+    // Keep legacy top-right UI hidden to avoid duplicate name display
+    try { if (ui) ui.style.display = 'none'; } catch (e) {}
+    try { if (name) name.innerText = info.name && info.name.display_name ? info.name.display_name : (info.email || 'Dropbox User'); } catch (e) {}
+    try { if (email) email.innerText = info.email || ''; } catch (e) {}
+    try { if (avatar && info.profile_photo_url) avatar.src = info.profile_photo_url; else if (avatar) avatar.style.display = 'none'; } catch (e) {}
+    try { connectBtn.innerText = 'Connected'; } catch (e) {}
     const disc = document.getElementById('disconnectDropbox'); if (disc) disc.style.display = 'inline-block';
     updateDropboxStatus(true, info);
   } catch (e) { console.warn('showAccount error', e); }
@@ -1901,8 +2668,12 @@ if (disconnectBtn) {
 async function loadAccountAfterSignIn() {
   try {
     const acc = await window.electronAPI.drive.getAccount();
-    if (acc && acc.ok && acc.info) showAccount(acc.info);
-    else updateDropboxStatus(false);
+    if (acc && acc.ok && acc.info) {
+      showAccount(acc.info);
+      try { updateExtraCards(); } catch (e) {}
+    } else {
+      updateDropboxStatus(false);
+    }
   } catch (e) { console.warn('loadAccountAfterSignIn failed', e); }
 }
 
@@ -2028,6 +2799,7 @@ function updateDropboxStatus(connected, info) {
         try { const ph = document.getElementById('sidebarConnectPlaceholder'); if (ph && ph.parentNode) ph.parentNode.removeChild(ph); } catch (e) {}
         // render stats and year cards immediately (allow UI to paint)
         try { renderStatsCards(currentEntries || []); } catch (e) {}
+        try { updateExtraCards(); } catch (e) {}
         try { if (typeof renderYearCards === 'function') renderYearCards(currentEntries || []); else { const localList = document.getElementById('localList'); if (localList) localList.innerHTML = ''; } } catch (e) { const localList = document.getElementById('localList'); if (localList) localList.innerHTML = ''; }
         // schedule alignment on next frame
         try { requestAnimationFrame(() => { try { alignStatsRow(); } catch (e) {} }); } catch (e) { try { setTimeout(alignStatsRow, 40); } catch (er) {} }

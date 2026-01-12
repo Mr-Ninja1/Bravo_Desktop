@@ -1,5 +1,4 @@
-const fs = require('fs');
-const path = require('path');
+// Node fs/path removed for mobile; use payload.assets.logoDataUri instead.
 
 const escapeHtml = (s) => String(s === null || s === undefined ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
@@ -14,37 +13,40 @@ const normalizeIncoming = (incoming) => {
 
 const resolveSignatureUri = (val) => {
   if (!val) return null;
+  try {
+    // Accept objects with common keys
+    if (typeof val === 'object') {
+      if (val.dataUri && String(val.dataUri).trim()) return String(val.dataUri).trim();
+      if (val.uri && String(val.uri).trim()) return String(val.uri).trim();
+      if (val.url && String(val.url).trim()) return String(val.url).trim();
+      if (val.signature && String(val.signature).trim()) return String(val.signature).trim();
+      // fallback to stringifying
+      val = JSON.stringify(val);
+    }
+  } catch (e) {}
   const s = String(val || '');
+  if (!s) return null;
+  // already a data URI
   if (s.startsWith('data:')) return s;
+  // strip whitespace/newlines and treat long base64 strings as image data
   const compact = s.replace(/\s+/g, '');
   if (compact.length > 100) return `data:image/png;base64,${compact}`;
+  // if it's an http(s) URL, return as-is
+  if (/^https?:\/\//i.test(s)) return s;
   return null;
 };
 
 const renderSig = (v, w = 40, h = 25) => {
   const uri = resolveSignatureUri(v);
   if (!uri) return '';
-  return `<img src="${uri}" style="max-width:${w}px; max-height:${h}px; width:auto; display:block; margin:0 auto; object-fit:contain; mix-blend-mode: multiply;"/>`;
+  // show image and hide if it fails to load to avoid revealing raw data
+  return `<img src="${uri}" style="max-width:${w}px; max-height:${h}px; width:auto; display:block; margin:0 auto; object-fit:contain; mix-blend-mode: multiply;" onerror="this.style.display='none'" alt="signature"/>`;
 };
 
 const getLogoDataUri = (p) => {
   if (!p) return null;
-  if (p.assets && p.assets.logoDataUri) return p.assets.logoDataUri;
-  // Look for logo in local assets
-  const candidates = [
-    path.join(process.cwd(), 'renderer', 'assets', 'logo.jpeg'),
-    path.join(process.cwd(), 'assets', 'logo.jpeg'),
-    path.join(process.cwd(), 'assets', 'logo.jpeg')
-  ];
-  for (const c of candidates) {
-    try {
-      if (fs.existsSync(c)) {
-        const b = fs.readFileSync(c);
-        const mime = path.extname(c).toLowerCase() === '.png' ? 'image/png' : 'image/jpeg';
-        return `data:${mime};base64,${b.toString('base64')}`;
-      }
-    } catch (e) {}
-  }
+  if (p.assets && (p.assets.logoDataUri || p.assets.logo)) return p.assets.logoDataUri || p.assets.logo;
+  if (p && (p.logoDataUri || p.logo)) return p.logoDataUri || p.logo;
   return null;
 };
 
@@ -55,12 +57,56 @@ module.exports = function generate(payloadWrapper) {
   const week = p.week || metadata.week || '';
   const month = p.month || metadata.month || '';
   const year = p.year || metadata.year || '';
-  const compiledBy = p.compiledBy || metadata.compiledBy || '';
-  const approvedBy = p.approvedBy || metadata.approvedBy || '';
-  const verifiedBy = p.verifiedBy || metadata.verifiedBy || '';
+  let compiledBy = p.compiledBy || metadata.compiledBy || '';
+  let approvedBy = p.approvedBy || metadata.approvedBy || '';
+  let verifiedBy = p.verifiedBy || metadata.verifiedBy || '';
+  // prefer explicit sign fields when present
+  let compiledBySign = metadata.compiledBySign || p.compiledBySign || '';
+  let approvedBySign = metadata.approvedBySign || p.approvedBySign || '';
+  let verifiedBySign = metadata.verifiedBySign || p.verifiedBySign || '';
+
+  // If a name field actually contains a signature (data URI, long base64, or http URL),
+  // move it into the corresponding sign variable and clear the name for display.
+  const moveNameToSignIfSignature = (nameVal, signVal) => {
+    try {
+      if (!signVal && nameVal) {
+        const maybe = resolveSignatureUri(nameVal);
+        if (maybe) {
+          return ['','' + maybe];
+        }
+      }
+    } catch (e) {}
+    return [nameVal || '', signVal || ''];
+  };
+
+  [compiledBy, compiledBySign] = moveNameToSignIfSignature(compiledBy, compiledBySign);
+  [approvedBy, approvedBySign] = moveNameToSignIfSignature(approvedBy, approvedBySign);
+  [verifiedBy, verifiedBySign] = moveNameToSignIfSignature(verifiedBy, verifiedBySign);
   
-  // Resolve Logo
-  const logoData = getLogoDataUri(p);
+  // Resolve Logo: prefer payload assets, then payload fields, then metadata; if none,
+  // attempt to read the bundled assets/logo.jpeg and embed as a data URI (desktop only).
+  let logoData = getLogoDataUri(p) || p.logo || p.logoDataUri || metadata.logoUrl || metadata.companyLogo || metadata.logo || null;
+  if (!logoData) {
+    try {
+      const fs = require('fs');
+      const path = require('path');
+      const candidates = [
+        path.join(process.cwd(), 'assets', 'logo.jpeg'),
+        path.join(process.cwd(), 'assets', 'logo.jpg'),
+        path.join(__dirname, '..', '..', 'assets', 'logo.jpeg'),
+        path.join(__dirname, '..', '..', 'assets', 'logo.jpg')
+      ];
+      for (const c of candidates) {
+        try {
+          if (fs.existsSync(c)) {
+            const data = fs.readFileSync(c);
+            logoData = `data:image/jpeg;base64,${data.toString('base64')}`;
+            break;
+          }
+        } catch (e) {}
+      }
+    } catch (e) {}
+  }
 
   const COL = { NAME: 140, JOB: 110, TIME: 44, SIGN: 42, SUP: 70 };
   const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -163,17 +209,17 @@ module.exports = function generate(payloadWrapper) {
     </table>
 
     <div class="footer">
-      <div class="sigBox">
+        <div class="sigBox">
         <strong>Compiled By:</strong> ${escapeHtml(compiledBy)}
-        <div style="margin-top:5px">${renderSig(metadata.compiledBySign || p.compiledBySign, 180, 30)}</div>
+        <div style="margin-top:5px">${renderSig(compiledBySign, 180, 30) || ''}</div>
       </div>
       <div class="sigBox">
         <strong>Approved By:</strong> ${escapeHtml(approvedBy)}
-        <div style="margin-top:5px">${renderSig(metadata.approvedBySign || p.approvedBySign, 180, 30)}</div>
+        <div style="margin-top:5px">${renderSig(approvedBySign, 180, 30) || ''}</div>
       </div>
       <div class="sigBox">
         <strong>Verified By (HSEQ):</strong> ${escapeHtml(verifiedBy)}
-        <div style="margin-top:5px">${renderSig(metadata.verifiedBySign || p.verifiedBySign, 180, 30)}</div>
+        <div style="margin-top:5px">${renderSig(verifiedBySign, 180, 30) || ''}</div>
       </div>
     </div>
   </div>
