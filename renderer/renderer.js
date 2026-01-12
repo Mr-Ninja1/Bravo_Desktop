@@ -142,25 +142,21 @@ function showTrialExpiredModal(featureReadable) {
         if (!key) return showNotification('Activation', 'Please enter a product key', 'error');
         validateBtn.disabled = true; cancelEntry.disabled = true; keyInput.disabled = true;
         try { showSpinner('Validating key...'); } catch (e) {}
-        let ok = false;
-        if (KEYS_JSON_URL) {
-          try {
-            const v = await validateKeyOnline(key, KEYS_JSON_URL);
-            if (!v || !v.found) { showNotification('Activation failed', 'Key not found', 'error'); return; }
-            if (v.used) { showNotification('Activation failed', 'Key already used', 'error'); return; }
-            ok = unlockAllWithKey(key);
-            if (ok) {
-              showNotification('Activated', 'Product key accepted — features unlocked.', 'success');
-              try { teardown(); } catch (e) {}
-            } else {
-              showNotification('Activation failed', 'Unable to save product key', 'error');
-            }
-          } catch (e) { console.warn('online key validation failed', e); showNotification('Activation failed', 'Validation error', 'error'); return; }
-        } else {
-          // Online validation required
-          showNotification('Activation failed', 'Online validation unavailable', 'error');
-          return;
-        }
+        // Online-only validation: require the hosted keys.json to validate
+        if (!KEYS_JSON_URL) { showNotification('Activation failed', 'No validation URL configured', 'error'); return; }
+        try {
+          const v = await validateKeyOnline(key, KEYS_JSON_URL);
+          if (!v || !v.found) { showNotification('Activation failed', 'Key not found', 'error'); return; }
+          if (v.used) { showNotification('Activation failed', 'Key already used', 'error'); return; }
+          const ok = unlockAllWithKey(key);
+          if (ok) {
+            showNotification('Activated', 'Product key accepted — features unlocked.', 'success');
+            try { teardown(); } catch (e) {}
+            try { setTimeout(() => { try { window.location.reload(); } catch (e) {} }, 450); } catch (e) {}
+          } else {
+            showNotification('Activation failed', 'Unable to save key locally', 'error');
+          }
+        } catch (e) { console.warn('online key validation failed', e); showNotification('Activation failed', 'Validation error', 'error'); }
       } catch (e) { console.warn('validateBtn failed', e); showNotification('Activation failed', String(e), 'error'); }
       finally { try { validateBtn.disabled = false; cancelEntry.disabled = false; keyInput.disabled = false; hideSpinner(); } catch (e) {} }
     });
@@ -392,37 +388,30 @@ function showUnlockModal() {
       try {
         const key = (keyInput.value || '').trim();
         if (!key) return showNotification('Remove', 'Enter product key', 'error');
+        if (!KEYS_JSON_URL) return showNotification('Remove', 'No validation URL configured', 'error');
+        try { showSpinner('Validating product key...'); } catch (e) {}
+        const v = await validateKeyOnline(key, KEYS_JSON_URL);
+        try { hideSpinner(); } catch (e) {}
+        if (!v || !v.found) return showNotification('Invalid key', 'Product key not recognized', 'error');
         const lic = _loadLicense();
-        if (lic && lic.productKey && String(lic.productKey) === key) {
-          removeAppLockPassword();
-          restore();
-          showNotification('Removed', 'App lock removed via product key', 'success');
-          try { if (typeof updateExtraCards === 'function') updateExtraCards(); } catch (e) {}
-          return;
-        }
-        // If local productKey didn't match, require online validation
-        if (KEYS_JSON_URL) {
-          try {
-            try { showSpinner('Validating product key...'); } catch (e) {}
-            const v = await validateKeyOnline(key, KEYS_JSON_URL);
-            try { hideSpinner(); } catch (e) {}
-            if (!v || !v.found) { return showNotification('Invalid key', 'Product key not recognized', 'error'); }
-            if (v.used) { return showNotification('Invalid key', 'Product key has been marked used', 'error'); }
-            // Save product key locally and remove lock
-            const ok = unlockAllWithKey(key);
-            if (ok) {
-              removeAppLockPassword();
-              restore();
-              showNotification('Removed', 'App lock removed via product key', 'success');
-              try { if (typeof updateExtraCards === 'function') updateExtraCards(); } catch (e) {}
-            } else {
-              showNotification('Error', 'Unable to save product key locally', 'error');
-            }
+        // If key record shows it was already used, be strict: only allow removal if it matches the local saved productKey
+        if (v.used) {
+          if (lic && lic.productKey && String(lic.productKey) === key) {
+            removeAppLockPassword(); restore(); showNotification('Removed', 'App lock removed via product key', 'success');
+            try { if (typeof updateExtraCards === 'function') updateExtraCards(); } catch (e) {}
             return;
-          } catch (e) { console.warn('online validate failed', e); try { hideSpinner(); } catch (ex) {} return showNotification('Validation error', 'Unable to validate key', 'error'); }
+          }
+          return showNotification('Invalid key', 'Key is marked used and does not match local license', 'error');
         }
-        // No online validation available and local key didn't match
-        showNotification('Invalid key', 'Product key not recognized', 'error');
+        // If key is valid and not marked used, accept it: persist license and remove lock
+        const setOk = unlockAllWithKey(key);
+        if (setOk) {
+          removeAppLockPassword(); restore(); showNotification('Removed', 'App lock removed via product key', 'success');
+          try { if (typeof updateExtraCards === 'function') updateExtraCards(); } catch (e) {}
+          try { setTimeout(() => { try { window.location.reload(); } catch (e) {} }, 450); } catch (e) {}
+        } else {
+          showNotification('Error', 'Unable to save license locally', 'error');
+        }
       } catch (e) { console.warn('remove via key failed', e); showNotification('Error', 'Unable to remove password', 'error'); }
     });
 
