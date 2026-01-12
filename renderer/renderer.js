@@ -82,49 +82,337 @@ function unlockAllWithKey(key) {
     _licenseState.unlockedFeatures['batchExport'] = true;
     _licenseState.unlockedFeatures['openToday'] = true;
     _licenseState.unlockedFeatures['storageCard'] = true;
+    _licenseState.unlockedFeatures['userCard'] = true;
+    _licenseState.unlockedFeatures['totalCard'] = true;
+    _licenseState.unlockedFeatures['securityCard'] = true;
     _saveLicense(_licenseState);
     return true;
   } catch (e) { return false; }
 }
 function showTrialExpiredModal(featureReadable) {
   try {
-    const overlay = document.createElement('div'); overlay.className = 'modalOverlay'; overlay.style.zIndex = 62000;
-    const box = document.createElement('div'); box.className = 'modalBox'; box.style.minWidth = '360px'; box.style.maxWidth = '80%'; box.style.padding = '12px'; box.style.position = 'relative';
-    const h = document.createElement('div'); h.style.fontWeight = '800'; h.style.marginBottom = '8px'; h.innerText = `${featureReadable} — Trial expired`;
-    const p = document.createElement('div'); p.style.color = '#475569'; p.style.marginBottom = '12px'; p.innerText = 'This feature is part of a paid add-on. Your trial period has ended. Contact the developer to purchase a product key to unlock.';
-    const actions = document.createElement('div'); actions.style.display = 'flex'; actions.style.justifyContent = 'flex-end'; actions.style.gap = '8px';
-    const enter = document.createElement('button'); enter.className = 'glowBtn'; enter.innerText = 'Enter product key';
-    const close = document.createElement('button'); close.innerText = 'Close'; close.style.border = '1px solid #e2e8f0'; close.style.background = '#fff';
-    actions.appendChild(close); actions.appendChild(enter);
-    box.appendChild(h); box.appendChild(p); box.appendChild(actions); overlay.appendChild(box); document.body.appendChild(overlay);
-    close.addEventListener('click', () => { try { document.body.removeChild(overlay); } catch (e) {} });
-    enter.addEventListener('click', async () => {
+    const PURCHASE_URL = (typeof window !== 'undefined' && window.__PURCHASE_URL) ? window.__PURCHASE_URL : 'https://example.com/buy';
+    const overlay = document.createElement('div'); overlay.className = 'modalOverlay'; overlay.style.zIndex = 62000; overlay.style.background = 'rgba(0,0,0,0.6)';
+    const box = document.createElement('div'); box.className = 'modalBox'; box.style.minWidth = '380px'; box.style.maxWidth = '92%'; box.style.padding = '18px'; box.style.position = 'relative'; box.style.background = '#0b1220'; box.style.color = '#fff'; box.style.borderRadius = '10px';
+    const h = document.createElement('div'); h.style.fontWeight = '800'; h.style.marginBottom = '8px'; h.style.fontSize = '16px'; h.style.color = '#fff'; h.innerText = `${featureReadable} — Expired`;
+    const p = document.createElement('div'); p.style.color = '#e6eefc'; p.style.marginBottom = '12px'; p.style.lineHeight = '1.4';
+    p.innerText = "Buy the key from the developer's website or contact the developer directly. Press the 'Buy' button to purchase the key. To activate: click 'Enter key', paste your key, then press 'ACTIVATE'.";
+
+    // inline entry area (hidden until requested)
+    const entryWrap = document.createElement('div'); entryWrap.style.display = 'none'; entryWrap.style.marginTop = '8px';
+    const keyInput = document.createElement('input'); keyInput.type = 'text'; keyInput.placeholder = 'Enter product key here'; keyInput.style.width = '100%'; keyInput.style.padding = '8px'; keyInput.style.borderRadius = '6px'; keyInput.style.border = '1px solid rgba(255,255,255,0.12)'; keyInput.style.background = 'transparent'; keyInput.style.color = '#fff'; keyInput.style.boxSizing = 'border-box';
+    keyInput.style.marginBottom = '8px';
+    const keyActions = document.createElement('div'); keyActions.style.display = 'flex'; keyActions.style.justifyContent = 'flex-end'; keyActions.style.gap = '8px';
+    const validateBtn = document.createElement('button'); validateBtn.className = 'glowBtn'; validateBtn.innerText = 'ACTIVATE';
+    const cancelEntry = document.createElement('button'); cancelEntry.innerText = 'Cancel'; cancelEntry.style.border = '1px solid rgba(255,255,255,0.12)'; cancelEntry.style.background = 'transparent'; cancelEntry.style.color = '#fff';
+    keyActions.appendChild(cancelEntry); keyActions.appendChild(validateBtn);
+    entryWrap.appendChild(keyInput); entryWrap.appendChild(keyActions);
+
+    const actions = document.createElement('div'); actions.style.display = 'flex'; actions.style.justifyContent = 'space-between'; actions.style.gap = '8px'; actions.style.marginTop = '12px';
+    const leftActions = document.createElement('div'); leftActions.style.display = 'flex'; leftActions.style.gap = '8px';
+    const buy = document.createElement('button'); buy.id = 'trialBuyBtn'; buy.innerText = 'Buy'; buy.style.background = '#ef4444'; buy.style.color = '#fff'; buy.style.border = 'none'; buy.style.padding = '8px 12px'; buy.style.borderRadius = '8px';
+    const enter = document.createElement('button'); enter.className = 'glowBtn'; enter.id = 'trialEnterBtn'; enter.innerText = 'Enter key';
+    leftActions.appendChild(buy); leftActions.appendChild(enter);
+    const rightActions = document.createElement('div'); rightActions.style.display = 'flex'; rightActions.style.gap = '8px';
+    const close = document.createElement('button'); close.innerText = 'Close'; close.style.border = '1px solid rgba(255,255,255,0.12)'; close.style.background = 'transparent'; close.style.color = '#fff';
+    rightActions.appendChild(close);
+    actions.appendChild(leftActions); actions.appendChild(rightActions);
+
+    box.appendChild(h); box.appendChild(p); box.appendChild(entryWrap); box.appendChild(actions); overlay.appendChild(box); document.body.appendChild(overlay);
+
+    function teardown() { try { document.body.removeChild(overlay); } catch (e) {} }
+
+    close.addEventListener('click', () => { try { teardown(); } catch (e) {} });
+    buy.addEventListener('click', () => {
       try {
-        const key = prompt('Enter product key:');
-        if (!key) return;
-        // If KEYS_JSON_URL is configured, validate online first
+        if (window.electronAPI && typeof window.electronAPI.openExternal === 'function') return window.electronAPI.openExternal(PURCHASE_URL || 'https://example.com/buy');
+        try { window.open(PURCHASE_URL || 'https://example.com/buy', '_blank'); } catch (e) { console.warn('open external failed', e); }
+      } catch (e) { console.warn('buy click failed', e); }
+    });
+
+    enter.addEventListener('click', () => {
+      try { entryWrap.style.display = entryWrap.style.display === 'none' ? 'block' : 'none'; if (entryWrap.style.display === 'block') keyInput.focus(); } catch (e) { console.warn('enter key show failed', e); }
+    });
+
+    cancelEntry.addEventListener('click', () => { try { entryWrap.style.display = 'none'; keyInput.value = ''; } catch (e) {} });
+
+    validateBtn.addEventListener('click', async () => {
+      try {
+        const key = (keyInput && keyInput.value || '').trim();
+        if (!key) return showNotification('Activation', 'Please enter a product key', 'error');
+        validateBtn.disabled = true; cancelEntry.disabled = true; keyInput.disabled = true;
+        try { showSpinner('Validating key...'); } catch (e) {}
         let ok = false;
-        if (KEYS_JSON_URL && KEYS_JSON_URL.includes('raw.githubusercontent.com')) {
+        if (KEYS_JSON_URL) {
           try {
             const v = await validateKeyOnline(key, KEYS_JSON_URL);
-            if (!v.found) { showNotification('Activation failed', 'Key not found', 'error'); return; }
+            if (!v || !v.found) { showNotification('Activation failed', 'Key not found', 'error'); return; }
             if (v.used) { showNotification('Activation failed', 'Key already used', 'error'); return; }
-            // found and unused — accept locally but remind admin to mark used manually
             ok = unlockAllWithKey(key);
-            if (ok) showNotification('Activated', 'Product key accepted — features unlocked. Remember to mark the key as used in your hosted keys.json', 'success');
-          } catch (e) { console.warn('online key validation failed', e); }
+            if (ok) {
+              showNotification('Activated', 'Product key accepted — features unlocked.', 'success');
+              try { teardown(); } catch (e) {}
+            }
+          } catch (e) { console.warn('online key validation failed', e); showNotification('Activation failed', 'Validation error', 'error'); }
         }
-        // Fallback: local-only activation
         if (!ok) {
+          // Local fallback: accept any non-empty key locally
           const localOk = unlockAllWithKey(key);
-          try { document.body.removeChild(overlay); } catch (e) {}
-          if (localOk) showNotification('Activated (local)', 'Product key saved locally — features unlocked', 'success'); else showNotification('Activation failed', 'Invalid key', 'error');
-        } else {
-          try { document.body.removeChild(overlay); } catch (e) {}
+          if (localOk) {
+            showNotification('Activated (local)', 'Product key saved locally — features unlocked', 'success');
+            try { teardown(); } catch (e) {}
+          } else {
+            showNotification('Activation failed', 'Invalid key', 'error');
+          }
         }
-      } catch (e) { console.warn('enter key failed', e); }
+      } catch (e) { console.warn('validateBtn failed', e); showNotification('Activation failed', String(e), 'error'); }
+      finally { try { validateBtn.disabled = false; cancelEntry.disabled = false; keyInput.disabled = false; hideSpinner(); } catch (e) {} }
     });
+
   } catch (e) { console.warn('showTrialExpiredModal failed', e); }
+}
+
+// --- App lock helpers (simple hashed password stored in localStorage)
+async function hashStringSHA256(text) {
+  try {
+    if (!text) return '';
+    const enc = new TextEncoder();
+    const data = enc.encode(String(text));
+    const hash = await (crypto.subtle ? crypto.subtle.digest('SHA-256', data) : Promise.reject('no-subtle'));
+    const arr = Array.from(new Uint8Array(hash));
+    return arr.map(b => b.toString(16).padStart(2, '0')).join('');
+  } catch (e) { console.warn('hash failed', e); return '';} 
+}
+
+async function setAppLockPassword(pw) {
+  try {
+    if (!pw) return false;
+    const h = await hashStringSHA256(pw);
+    if (!h) return false;
+    localStorage.setItem('bravo_lock_v1', h);
+    return true;
+  } catch (e) { return false; }
+}
+
+async function verifyAppLockPassword(pw) {
+  try {
+    const stored = localStorage.getItem('bravo_lock_v1');
+    if (!stored) return false;
+    const h = await hashStringSHA256(pw);
+    return h === stored;
+  } catch (e) { return false; }
+}
+
+function removeAppLockPassword() {
+  try { localStorage.removeItem('bravo_lock_v1'); return true; } catch (e) { return false; }
+}
+
+function showSecurityModal() {
+  try {
+    const overlay = document.createElement('div'); overlay.className = 'modalOverlay'; overlay.style.zIndex = 62010; overlay.style.background = 'rgba(0,0,0,0.6)';
+    const box = document.createElement('div'); box.className = 'modalBox'; box.style.minWidth = '360px'; box.style.padding = '14px'; box.style.background = '#fff'; box.style.color = '#000'; box.style.borderRadius = '8px';
+    const h = document.createElement('div'); h.style.fontWeight = '800'; h.style.marginBottom = '8px'; h.innerText = 'App lock — Password';
+    const p = document.createElement('div'); p.style.marginBottom = '8px'; p.style.color = '#fff'; p.innerText = 'Set or change an app-lock password. You can also remove it.';
+
+    const has = Boolean(localStorage.getItem('bravo_lock_v1'));
+    const currentWrap = document.createElement('div'); currentWrap.style.marginBottom = '8px';
+    if (has) {
+      const curLabel = document.createElement('div'); curLabel.innerText = 'To change or remove the password, enter current password first.'; curLabel.style.marginBottom = '6px'; curLabel.style.fontSize = '13px'; curLabel.style.color = '#fff';
+      const curInput = document.createElement('input'); curInput.type = 'password'; curInput.placeholder = 'Current password'; curInput.style.width = '100%'; curInput.style.padding = '8px'; curInput.style.marginBottom = '8px';
+      currentWrap.appendChild(curLabel); currentWrap.appendChild(curInput);
+    }
+
+    const newLabel = document.createElement('div'); newLabel.innerText = has ? 'New password' : 'Set a new password'; newLabel.style.marginBottom = '6px'; newLabel.style.fontSize = '13px'; newLabel.style.color = '#fff';
+    const newInput = document.createElement('input'); newInput.type = 'password'; newInput.placeholder = has ? 'New password (leave blank to keep)' : 'New password'; newInput.style.width = '100%'; newInput.style.padding = '8px'; newInput.style.marginBottom = '8px';
+    const confirmInput = document.createElement('input'); confirmInput.type = 'password'; confirmInput.placeholder = 'Confirm new password'; confirmInput.style.width = '100%'; confirmInput.style.padding = '8px'; confirmInput.style.marginBottom = '8px';
+
+    const actions = document.createElement('div'); actions.style.display = 'flex'; actions.style.justifyContent = 'flex-end'; actions.style.gap = '8px';
+    const removeBtn = document.createElement('button'); removeBtn.innerText = 'Remove'; removeBtn.style.background = '#ef4444'; removeBtn.style.color='#fff'; removeBtn.style.border='none'; removeBtn.style.padding='8px 12px'; removeBtn.style.borderRadius='6px';
+    const saveBtn = document.createElement('button'); saveBtn.className = 'glowBtn'; saveBtn.innerText = has ? 'Change' : 'Set';
+    const closeBtn = document.createElement('button'); closeBtn.innerText = 'Close'; closeBtn.style.border='1px solid #e5e7eb'; closeBtn.style.background='#fff'; closeBtn.style.padding='8px 12px'; closeBtn.style.borderRadius='6px';
+    actions.appendChild(closeBtn); actions.appendChild(removeBtn); actions.appendChild(saveBtn);
+
+    box.appendChild(h); box.appendChild(p); if (has) box.appendChild(currentWrap); box.appendChild(newLabel); box.appendChild(newInput); box.appendChild(confirmInput); box.appendChild(actions); overlay.appendChild(box); document.body.appendChild(overlay);
+
+    function teardown() { try { document.body.removeChild(overlay); } catch (e) {} }
+    closeBtn.addEventListener('click', teardown);
+
+    removeBtn.addEventListener('click', async () => {
+      try {
+        if (!has) return showNotification('Remove', 'No password set', 'error');
+        const cur = currentWrap.querySelector('input[type=password]') && currentWrap.querySelector('input[type=password]').value || '';
+        if (!cur) return showNotification('Remove', 'Enter current password to remove', 'error');
+        const ok = await verifyAppLockPassword(cur);
+        if (!ok) return showNotification('Remove', 'Current password incorrect', 'error');
+        removeAppLockPassword();
+        showNotification('Removed', 'App lock removed', 'success');
+        try { teardown(); } catch (e) {}
+        try { if (typeof updateExtraCards === 'function') updateExtraCards(); } catch (e) {}
+      } catch (e) { console.warn('remove lock failed', e); showNotification('Error', 'Unable to remove password', 'error'); }
+    });
+
+    saveBtn.addEventListener('click', async () => {
+      try {
+        const newPw = newInput.value || '';
+        const confirm = confirmInput.value || '';
+        if (!newPw) return showNotification('Save', 'Enter a new password', 'error');
+        if (newPw !== confirm) return showNotification('Save', 'New password and confirm do not match', 'error');
+        if (has) {
+          const cur = currentWrap.querySelector('input[type=password]') && currentWrap.querySelector('input[type=password]').value || '';
+          if (!cur) return showNotification('Change', 'Enter current password', 'error');
+          const ok = await verifyAppLockPassword(cur);
+          if (!ok) return showNotification('Change', 'Current password incorrect', 'error');
+        }
+        const setOk = await setAppLockPassword(newPw);
+        if (setOk) { showNotification('Saved', 'Password saved', 'success'); try { teardown(); } catch (e) {} try { if (typeof updateExtraCards === 'function') updateExtraCards(); } catch (e) {} } else { showNotification('Save failed', 'Could not save password', 'error'); }
+      } catch (e) { console.warn('save lock failed', e); showNotification('Error', 'Unable to save password', 'error'); }
+    });
+
+  } catch (e) { console.warn('showSecurityModal failed', e); showNotification('Error', 'Unable to open security modal', 'error'); }
+}
+
+// Informational modal that explains app-lock and links to Manage (adds password)
+function showSecurityInfoModal() {
+  try {
+    const overlay = document.createElement('div'); overlay.className = 'modalOverlay'; overlay.style.zIndex = 62011; overlay.style.background = 'rgba(0,0,0,0.6)';
+    const box = document.createElement('div'); box.className = 'modalBox'; box.style.minWidth = '380px'; box.style.padding = '14px'; box.style.background = '#fff'; box.style.color = '#000'; box.style.borderRadius = '8px';
+    const h = document.createElement('div'); h.style.fontWeight = '800'; h.style.marginBottom = '8px'; h.innerText = 'Protect your app';
+    const p = document.createElement('div'); p.style.marginBottom = '12px'; p.style.color = '#333'; p.style.lineHeight = '1.4';
+    p.innerText = "Add a password to lock the app and protect your data. This prevents others from opening the app without the password.";
+    const hint = document.createElement('div'); hint.style.marginBottom = '12px'; hint.style.color = '#555'; hint.innerText = "To add a password, press 'Manage App Lock' below. You'll be asked to create and confirm a password. Don't forget it!";
+    const actions = document.createElement('div'); actions.style.display = 'flex'; actions.style.justifyContent = 'flex-end'; actions.style.gap = '8px';
+    const manage = document.createElement('button'); manage.className = 'glowBtn'; manage.innerText = 'Manage App Lock';
+    const close = document.createElement('button'); close.innerText = 'Close'; close.style.border = '1px solid #e5e7eb'; close.style.background = '#fff'; close.style.padding = '8px 12px'; close.style.borderRadius = '6px';
+    actions.appendChild(close); actions.appendChild(manage);
+    box.appendChild(h); box.appendChild(p); box.appendChild(hint); box.appendChild(actions); overlay.appendChild(box); document.body.appendChild(overlay);
+    function teardown() { try { document.body.removeChild(overlay); } catch (e) {} }
+    close.addEventListener('click', teardown);
+    manage.addEventListener('click', () => { try { teardown(); showSecurityModal(); } catch (e) { console.warn('manage from info failed', e); } });
+  } catch (e) { console.warn('showSecurityInfoModal failed', e); }
+}
+
+// Unlock modal shown immediately after splash when an app-lock password is set.
+function showUnlockModal() {
+  try {
+    // Create an overlay that fully blocks and obscures the background
+    const overlay = document.createElement('div');
+    overlay.style.position = 'fixed';
+    overlay.style.inset = '0';
+    overlay.style.zIndex = 65000;
+    overlay.style.background = 'rgba(2,6,23,0.92)';
+    overlay.style.display = 'flex';
+    overlay.style.alignItems = 'center';
+    overlay.style.justifyContent = 'center';
+    overlay.style.backdropFilter = 'blur(6px)';
+    overlay.style.webkitBackdropFilter = 'blur(6px)';
+
+    // Do not blur the entire document (this would also blur the modal)
+    // rely on overlay.backdropFilter to obscure background instead
+    const prevFilter = null;
+
+    const box = document.createElement('div');
+    box.style.minWidth = '380px';
+    box.style.maxWidth = '92%';
+    box.style.padding = '18px';
+    box.style.borderRadius = '12px';
+    box.style.boxSizing = 'border-box';
+    box.style.background = 'linear-gradient(180deg, rgba(6,10,20,0.95), rgba(12,18,36,0.98))';
+    box.style.color = '#aaf6ff';
+    box.style.position = 'relative';
+    box.style.zIndex = '65001';
+    box.style.border = '1px solid rgba(80,220,255,0.08)';
+    box.style.boxShadow = '0 20px 60px rgba(0,0,0,0.6), 0 0 24px rgba(0,160,255,0.04)';
+    box.style.fontFamily = "ui-monospace, SFMono-Regular, Menlo, Monaco, monospace";
+
+    const header = document.createElement('div');
+    header.style.display = 'flex';
+    header.style.justifyContent = 'space-between';
+    header.style.alignItems = 'center';
+    header.style.marginBottom = '8px';
+
+    const h = document.createElement('div'); h.style.fontWeight = '800'; h.style.fontSize = '16px'; h.innerText = 'APP LOCKED — AUTH REQUIRED';
+    const accent = document.createElement('div'); accent.style.height = '6px'; accent.style.width = '84px'; accent.style.borderRadius = '4px'; accent.style.background = 'linear-gradient(90deg,#00f0ff,#6f5cff)'; accent.style.boxShadow = '0 0 18px rgba(80,200,255,0.22)';
+    header.appendChild(h); header.appendChild(accent);
+
+    const p = document.createElement('div'); p.style.marginBottom = '12px'; p.style.color = '#9ef3ff'; p.style.opacity = '0.95'; p.style.lineHeight = '1.4'; p.innerText = 'Enter your password to unlock the app.';
+
+    const pwInput = document.createElement('input'); pwInput.type = 'password'; pwInput.placeholder = 'Password';
+    pwInput.style.width = '100%'; pwInput.style.padding = '12px'; pwInput.style.marginBottom = '10px'; pwInput.style.borderRadius = '8px'; pwInput.style.border = '1px solid rgba(80,220,255,0.08)'; pwInput.style.background = 'rgba(12,14,20,0.6)'; pwInput.style.color = '#dffcff'; pwInput.style.outline = 'none';
+
+    const forgotWrap = document.createElement('div'); forgotWrap.style.marginBottom = '8px'; forgotWrap.style.display = 'flex'; forgotWrap.style.justifyContent = 'flex-end';
+    const forgotBtn = document.createElement('button'); forgotBtn.innerText = 'Forgot password'; forgotBtn.style.background = 'transparent'; forgotBtn.style.border = 'none'; forgotBtn.style.color = '#48c6ff'; forgotBtn.style.cursor = 'pointer'; forgotBtn.style.textDecoration = 'underline'; forgotBtn.style.fontSize = '13px';
+    forgotWrap.appendChild(forgotBtn);
+
+    const keyEntryWrap = document.createElement('div'); keyEntryWrap.style.display = 'none'; keyEntryWrap.style.marginTop = '8px';
+    const keyInput = document.createElement('input'); keyInput.type = 'text'; keyInput.placeholder = 'Enter product key to remove password'; keyInput.style.width = '100%'; keyInput.style.padding = '10px'; keyInput.style.marginBottom = '8px'; keyInput.style.borderRadius = '8px'; keyInput.style.border = '1px solid rgba(80,220,255,0.06)'; keyInput.style.background = 'rgba(8,12,18,0.6)'; keyInput.style.color = '#cffbff';
+    const keyActions = document.createElement('div'); keyActions.style.display = 'flex'; keyActions.style.justifyContent = 'flex-end'; keyActions.style.gap = '8px';
+    const keyCancel = document.createElement('button'); keyCancel.innerText = 'Cancel'; keyCancel.style.border = '1px solid rgba(255,255,255,0.06)'; keyCancel.style.background = 'transparent'; keyCancel.style.padding = '8px 12px'; keyCancel.style.borderRadius = '6px'; keyCancel.style.color = '#9ef3ff';
+    const keySubmit = document.createElement('button'); keySubmit.className = 'glowBtn'; keySubmit.innerText = 'Remove'; keySubmit.style.background = 'linear-gradient(90deg,#ff6b6b,#ef4444)'; keySubmit.style.border = 'none'; keySubmit.style.color = '#fff'; keySubmit.style.padding = '8px 12px'; keySubmit.style.borderRadius = '8px';
+    keyActions.appendChild(keyCancel); keyActions.appendChild(keySubmit);
+    keyEntryWrap.appendChild(keyInput); keyEntryWrap.appendChild(keyActions);
+
+    const actions = document.createElement('div'); actions.style.display = 'flex'; actions.style.justifyContent = 'flex-end'; actions.style.gap = '8px';
+    const unlockBtn = document.createElement('button'); unlockBtn.className = 'glowBtn'; unlockBtn.innerText = 'Unlock'; unlockBtn.style.background = 'linear-gradient(90deg,#00f0ff,#6f5cff)'; unlockBtn.style.border = 'none'; unlockBtn.style.color = '#00121a'; unlockBtn.style.padding = '10px 14px'; unlockBtn.style.borderRadius = '8px';
+    actions.appendChild(unlockBtn);
+
+    box.appendChild(header); box.appendChild(p); box.appendChild(pwInput); box.appendChild(forgotWrap); box.appendChild(keyEntryWrap); box.appendChild(actions); overlay.appendChild(box); document.body.appendChild(overlay);
+    try { pwInput.focus(); } catch (e) {}
+
+    // Teardown removes overlay and restores listeners
+    function restore() {
+      try { if (overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay); } catch (e) {}
+      try { window.removeEventListener('keydown', onKeyDown); } catch (e) {}
+    }
+
+    // Prevent Escape or other keys from closing the modal; trap Enter for unlock
+    function onKeyDown(ev) {
+      try {
+        if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); }
+        if (ev.key === 'Enter') { ev.preventDefault(); unlockBtn.click(); }
+      } catch (e) {}
+    }
+    window.addEventListener('keydown', onKeyDown, true);
+
+    // Unlock action: verify password and restore UI only on success
+    unlockBtn.addEventListener('click', async () => {
+      try {
+        const val = (pwInput.value || '').trim();
+        if (!val) return showNotification('Unlock', 'Enter password', 'error');
+        const ok = await verifyAppLockPassword(val);
+        if (!ok) return showNotification('Unlock failed', 'Incorrect password', 'error');
+        restore();
+        showNotification('Unlocked', 'App unlocked', 'success');
+      } catch (e) { console.warn('unlock failed', e); showNotification('Error', 'Unable to unlock', 'error'); }
+    });
+
+    // Forgot password toggles product-key removal UI
+    forgotBtn.addEventListener('click', () => {
+      try { keyEntryWrap.style.display = keyEntryWrap.style.display === 'none' ? 'block' : 'none'; if (keyEntryWrap.style.display === 'block') keyInput.focus(); } catch (e) {}
+    });
+
+    keyCancel.addEventListener('click', () => { try { keyEntryWrap.style.display = 'none'; keyInput.value = ''; } catch (e) {} });
+
+    keySubmit.addEventListener('click', () => {
+      try {
+        const key = (keyInput.value || '').trim();
+        if (!key) return showNotification('Remove', 'Enter product key', 'error');
+        const lic = _loadLicense();
+        if (lic && lic.productKey && String(lic.productKey) === key) {
+          removeAppLockPassword();
+          restore();
+          showNotification('Removed', 'App lock removed via product key', 'success');
+          try { if (typeof updateExtraCards === 'function') updateExtraCards(); } catch (e) {}
+        } else {
+          showNotification('Invalid key', 'Product key not recognized', 'error');
+        }
+      } catch (e) { console.warn('remove via key failed', e); showNotification('Error', 'Unable to remove password', 'error'); }
+    });
+
+    // Keyboard shortcuts for inputs
+    pwInput.addEventListener('keydown', (ev) => { try { if (ev.key === 'Enter') unlockBtn.click(); } catch (e) {} });
+    keyInput.addEventListener('keydown', (ev) => { try { if (ev.key === 'Enter') keySubmit.click(); } catch (e) {} });
+
+  } catch (e) { console.warn('showUnlockModal failed', e); }
 }
 
 function initFooter() {
@@ -193,69 +481,78 @@ async function updateExtraCards() {
     const storageCard = host.querySelector('.storageCard') || document.querySelector('.storageCard');
     
 
-    // Populate account info
-    try {
-      const acc = (window.electronAPI && window.electronAPI.drive && typeof window.electronAPI.drive.getAccount === 'function')
-        ? await window.electronAPI.drive.getAccount().catch(() => null)
-        : null;
-      if (acc && acc.ok && acc.info) {
-        const info = acc.info;
-        const name = (info.name && info.name.display_name) ? info.name.display_name : (info.email || 'Dropbox User');
-        const email = info.email || '';
-        if (userCard) {
-          const avatarImg = userCard.querySelector('img.statAvatar');
-          const nameEl = userCard.querySelector('.smallName');
-          const labelEl = userCard.querySelector('.statLabel');
-          try { if (avatarImg && info.profile_photo_url) avatarImg.src = info.profile_photo_url; else if (avatarImg) avatarImg.style.display = 'none'; } catch (e) {}
-          try { if (nameEl) nameEl.innerText = name; } catch (e) {}
-          try { if (labelEl) labelEl.innerText = email; } catch (e) {}
-        }
-      }
-    } catch (e) { }
-
-    // Populate storage/quota info
-    try {
-      const dbg = (window.electronAPI && window.electronAPI.drive && typeof window.electronAPI.drive.getDebug === 'function')
-        ? await window.electronAPI.drive.getDebug().catch(() => null)
-        : null;
-      let used = 0, total = 0;
-      if (dbg && dbg.ok && dbg.info) {
-        const info = dbg.info;
-        if (info.quota) {
-          used = info.quota.used_bytes || info.quota.used || 0;
-          total = (info.quota.allocation && (info.quota.allocation.allocated_bytes || info.quota.allocation)) || info.quota.allocated_bytes || 0;
-        } else if (info.usage) {
-          used = info.usage.used || info.usage.used_bytes || 0;
-          total = info.usage.total || 0;
-        } else if (typeof info.space_used !== 'undefined') {
-          used = info.space_used || 0; total = info.space_total || 0;
-        }
-      }
-      if (storageCard) {
-          const numbers = storageCard.querySelector('.storageNumbers');
-          const fill = storageCard.querySelector('.storageFill');
-          if (!isFeatureEnabled('storageCard')) {
-            try { if (numbers) numbers.innerText = 'Trial expired'; } catch (e) {}
-            try { if (fill) fill.style.width = '0%'; } catch (e) {}
-          } else {
-            if (total > 0) {
-              const pct = Math.max(0, Math.min(100, Math.round((used / total) * 100)));
-              const formatStorage = (bytes) => {
-                try {
-                  const gb = bytes / 1024 / 1024 / 1024;
-                  if (gb >= 1) return gb.toFixed(1) + ' GB';
-                  const mb = bytes / 1024 / 1024;
-                  return mb.toFixed(1) + ' MB';
-                } catch (e) { return '0.0 GB'; }
-              };
-              try { if (numbers) numbers.innerText = `${formatStorage(used)} / ${formatStorage(total)}`; } catch (e) {}
-              try { if (fill) fill.style.width = pct + '%'; } catch (e) {}
+      // Async populate user & storage info (respect trial gating)
+      (async () => {
+        try {
+          // account info
+          try {
+            const acc = await (window.electronAPI && window.electronAPI.drive && typeof window.electronAPI.drive.getAccount === 'function' ? window.electronAPI.drive.getAccount() : Promise.resolve(null));
+            const avatarImg = userCard.querySelector('img.statAvatar');
+            const nameEl = userCard.querySelector('.smallName');
+            const labelEl = userCard.querySelector('.statLabel');
+            if (!isFeatureEnabled('userCard')) {
+              try { if (nameEl) nameEl.innerText = 'Expired'; } catch (e) {}
+              try { if (labelEl) labelEl.innerText = ''; } catch (e) {}
+              try { if (avatarImg) avatarImg.style.display = 'none'; } catch (e) {}
             } else {
-              try { if (numbers) numbers.innerText = 'Unknown'; } catch (e) {}
+              if (acc && acc.ok && acc.info) {
+                const info = acc.info;
+                const name = (info.name && info.name.display_name) ? info.name.display_name : (info.email || 'User');
+                const email = info.email || '';
+                try { if (avatarImg && info.profile_photo_url) avatarImg.src = info.profile_photo_url; else if (avatarImg) avatarImg.style.display = 'none'; } catch (e) {}
+                try { if (nameEl) nameEl.innerText = name; } catch (e) {}
+                try { if (labelEl) labelEl.innerText = email; } catch (e) {}
+              }
             }
-          }
-      }
-    } catch (e) { }
+          } catch (e) { /* ignore account fetch failures */ }
+
+          // storage info (debug/quota)
+          try {
+            const numbers = storageCard.querySelector('.storageNumbers');
+            const fill = storageCard.querySelector('.storageFill');
+            if (!isFeatureEnabled('storageCard')) {
+              try { if (numbers) numbers.innerText = 'Expired'; } catch (e) {}
+              try { if (fill) fill.style.width = '0%'; } catch (e) {}
+            } else {
+              const dbg = await (window.electronAPI && window.electronAPI.drive && typeof window.electronAPI.drive.getDebug === 'function' ? window.electronAPI.drive.getDebug() : Promise.resolve(null));
+              let used = 0, total = 0;
+              if (dbg && dbg.ok && dbg.info) {
+                const info = dbg.info;
+                if (info.quota) {
+                  used = info.quota.used_bytes || info.quota.used || 0;
+                  total = (info.quota.allocation && (info.quota.allocation.allocated_bytes || info.quota.allocation)) || info.quota.allocated_bytes || 0;
+                } else if (info.usage) {
+                  used = info.usage.used || info.usage.used_bytes || 0;
+                  total = info.usage.total || 0;
+                } else if (typeof info.space_used !== 'undefined') {
+                  used = info.space_used || 0; total = info.space_total || 0;
+                }
+              }
+              if (total > 0) {
+                const pct = Math.max(0, Math.min(100, Math.round((used / total) * 100)));
+                const formatStorage = (bytes) => {
+                  try {
+                    const gb = bytes / 1024 / 1024 / 1024;
+                    if (gb >= 1) return gb.toFixed(1) + ' GB';
+                    const mb = bytes / 1024 / 1024;
+                    return mb.toFixed(1) + ' MB';
+                  } catch (e) { return '0.0 GB'; }
+                };
+                try { if (numbers) numbers.innerText = `${formatStorage(used)} / ${formatStorage(total)}`; } catch (e) {}
+                try { if (fill) fill.style.width = pct + '%'; } catch (e) {}
+              } else {
+                try { if (numbers) numbers.innerText = 'Unknown'; } catch (e) {}
+              }
+            }
+          } catch (e) { /* ignore storage fetch failures */ }
+
+          // Manage button opens existing manage modal if available
+          try {
+            const mbtn = document.getElementById('manageStorageBtn');
+            if (mbtn) mbtn.addEventListener('click', () => { try { if (typeof showManageConnectionModal === 'function') return showManageConnectionModal(); if (window.electronAPI && typeof window.electronAPI.revealInFolder === 'function') window.electronAPI.revealInFolder(''); } catch (e) {} });
+          } catch (e) { }
+        } catch (e) { /* overall extraRow population error */ }
+      })();
 
     // If account fetch failed but we have a refresh token, try polling for account info
     try {
@@ -387,7 +684,7 @@ function hideSpinner(force) {
 // Simple notification modal (replaces alert)
 function showNotification(title, message, type) {
   try {
-    const overlay = document.createElement('div'); overlay.className = 'modalOverlay'; overlay.style.setProperty('z-index','60001','important');
+    const overlay = document.createElement('div'); overlay.className = 'modalOverlay'; overlay.style.zIndex = '999999';
     const box = document.createElement('div'); box.className = 'modalBox';
     const h = document.createElement('div'); h.style.fontWeight = '800'; h.style.marginBottom = '8px'; h.innerText = title || '';
     const p = document.createElement('div'); p.innerText = message || '';
@@ -466,6 +763,119 @@ if (disableSplash) {
 
 // Connect using Desktop OAuth via main process
 initFooter();
+// If the app is locked, prompt for the password shortly after startup
+try {
+  setTimeout(() => {
+    try {
+      if (localStorage.getItem('bravo_lock_v1')) {
+        showUnlockModal();
+      }
+    } catch (e) {}
+  }, 700);
+} catch (e) {}
+
+// Add subtle futuristic PCB traces as a responsive SVG background
+function injectCyberTraces() {
+  try {
+    if (document.getElementById('bravoCyberTraces')) return;
+    const style = document.createElement('style');
+    style.id = 'bravoCyberTracesStyles';
+    style.innerHTML = `
+      /* Ensure key UI elements sit above the traces */
+      .statsRow, .statsRowExtra, .yearCardsSidebar, #yearSidebar, .statCard, .sidebarHeading { position: relative; z-index: 2; }
+      /* Make sure overlaying modals still appear above everything */
+      .modalOverlay, .modalBox { z-index: 99999 !important; }
+      /* Small tweak so traces don't capture pointer events */
+      #bravoCyberTraces { pointer-events: none; position: fixed; inset: 0; width: 100%; height: 100%; z-index: 0; }
+    `;
+    document.head.appendChild(style);
+
+    const svgNS = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(svgNS, 'svg');
+    svg.setAttribute('id', 'bravoCyberTraces');
+    svg.setAttribute('viewBox', '0 0 1920 1080');
+    svg.setAttribute('preserveAspectRatio', 'xMidYMid slice');
+
+    // defs: stronger glow filter for neon effect
+    const defs = document.createElementNS(svgNS, 'defs');
+    const filter = document.createElementNS(svgNS, 'filter'); filter.setAttribute('id', 'neon');
+    const feGaussian = document.createElementNS(svgNS, 'feGaussianBlur'); feGaussian.setAttribute('stdDeviation', '10'); feGaussian.setAttribute('result', 'coloredBlur');
+    const feColor = document.createElementNS(svgNS, 'feColorMatrix'); feColor.setAttribute('type', 'matrix'); feColor.setAttribute('values', '1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 1 0');
+    const feMerge = document.createElementNS(svgNS, 'feMerge');
+    const feMergeNode1 = document.createElementNS(svgNS, 'feMergeNode');
+    const feMergeNode2 = document.createElementNS(svgNS, 'feMergeNode');
+    feMergeNode1.setAttribute('in', 'coloredBlur');
+    feMergeNode2.setAttribute('in', 'SourceGraphic');
+    feMerge.appendChild(feMergeNode1); feMerge.appendChild(feMergeNode2);
+    filter.appendChild(feGaussian); filter.appendChild(feColor); filter.appendChild(feMerge); defs.appendChild(filter);
+
+    svg.appendChild(defs);
+
+    // Helper to create a neon path
+    function makePath(d, color, width, opacity) {
+      const p = document.createElementNS(svgNS, 'path');
+      p.setAttribute('d', d);
+      p.setAttribute('fill', 'none');
+      p.setAttribute('stroke', color || '#18e6ff');
+      p.setAttribute('stroke-width', String(width || 2));
+      p.setAttribute('stroke-linecap', 'round');
+      p.setAttribute('stroke-linejoin', 'round');
+      p.setAttribute('opacity', String(typeof opacity === 'undefined' ? 0.95 : opacity));
+      p.style.filter = 'url(#neon)';
+      return p;
+    }
+
+    // Top area traces (behind header/cards). Coordinates are for 1920x1080 and scale with viewport.
+    const top1 = makePath('M160 130 C 320 80, 700 100, 900 120 S1400 140, 1700 120', '#00f0ff', 5, 1);
+    const top2 = makePath('M120 200 C 280 170, 520 170, 760 180 S1180 200, 1680 180', '#2ee6b6', 4, 0.95);
+
+    // Sidebar traces (left column behind year cards)
+    const side1 = makePath('M80 260 L80 520 C80 560, 120 600, 160 620', '#2de0ff', 5, 1);
+    const side2 = makePath('M40 420 C 80 400, 140 420, 160 460', '#7af0ff', 4, 0.9);
+
+    // Small decorative segments near cards
+    const seg1 = makePath('M520 360 L580 360 L610 400', '#6fb7ff', 4, 1);
+    const seg2 = makePath('M300 140 L340 120 L380 140', '#9ef3ff', 3.5, 0.95);
+
+    // Add slight dash animation on one path
+    top1.setAttribute('stroke-dasharray', '8 6');
+    try { top1.animate([{ strokeDashoffset: 0 }, { strokeDashoffset: -48 }], { duration: 4000, iterations: Infinity }); } catch (e) {}
+
+    // Create soft glow clones behind main paths for stronger neon
+    function addGlow(p, extraWidth, glowOpacity) {
+      try {
+        const g = p.cloneNode();
+        const w = Number(p.getAttribute('stroke-width') || 3) + (extraWidth || 8);
+        g.setAttribute('stroke-width', String(w));
+        g.setAttribute('opacity', String(typeof glowOpacity === 'undefined' ? 0.14 : glowOpacity));
+        g.style.filter = 'url(#neon)';
+        // insert glow before the main path
+        svg.appendChild(g);
+      } catch (e) {}
+    }
+
+    svg.appendChild(top2);
+    addGlow(top2, 12, 0.14);
+    svg.appendChild(top1);
+    addGlow(top1, 14, 0.18);
+    svg.appendChild(side2);
+    addGlow(side2, 12, 0.12);
+    svg.appendChild(side1);
+    addGlow(side1, 14, 0.16);
+    svg.appendChild(seg1);
+    addGlow(seg1, 10, 0.15);
+    svg.appendChild(seg2);
+    addGlow(seg2, 8, 0.12);
+
+    // Make the SVG blend nicely with dark backgrounds
+    try { svg.style.mixBlendMode = 'screen'; svg.style.opacity = '1'; } catch (e) {}
+
+    // Insert as first child so it sits under main app layers (style ensures z-index ordering)
+    document.body.insertBefore(svg, document.body.firstChild);
+  } catch (e) { console.warn('injectCyberTraces failed', e); }
+}
+
+try { injectCyberTraces(); } catch (e) {}
 // Sidebar should remain visible to show year cards
 
 // Connect logic is now handled by the stat card connect button in renderStatsCards
@@ -728,7 +1138,13 @@ function renderStatsCards(entries) {
     // Header indicating these are the user's Dropbox forms
     const totalHeader = document.createElement('div'); totalHeader.className = 'statHeader'; totalHeader.innerText = 'Your forms in Dropbox';
     const totalVal = document.createElement('div'); totalVal.className = 'statValue';
-    totalVal.innerText = (fileEntries && fileEntries.length) ? String(fileEntries.length) : '0';
+    try {
+      if (!isFeatureEnabled('totalCard')) {
+        totalVal.innerText = 'Trial expired';
+      } else {
+        totalVal.innerText = (fileEntries && fileEntries.length) ? String(fileEntries.length) : '0';
+      }
+    } catch (e) { totalVal.innerText = (fileEntries && fileEntries.length) ? String(fileEntries.length) : '0'; }
     const totalLabel = document.createElement('div'); totalLabel.className = 'statLabel'; totalLabel.innerText = 'Total forms';
     total.appendChild(totalHeader); total.appendChild(totalVal); total.appendChild(totalLabel);
 
@@ -754,7 +1170,13 @@ function renderStatsCards(entries) {
       } catch (e) {}
       return acc;
     }, 0);
-    todayVal.innerText = String(todayCount);
+    try {
+      if (!isFeatureEnabled('openToday')) {
+        todayVal.innerText = 'Trial expired';
+      } else {
+        todayVal.innerText = String(todayCount);
+      }
+    } catch (e) { todayVal.innerText = String(todayCount); }
     // Action button container — use flex with gap and wrap to avoid overlap
     const todayActions = document.createElement('div');
     todayActions.style.marginTop = '12px';
@@ -763,7 +1185,13 @@ function renderStatsCards(entries) {
     todayActions.style.flexWrap = 'wrap';
     todayActions.style.alignItems = 'center';
     const openTodayBtn = document.createElement('button'); openTodayBtn.className = 'glowBtn'; openTodayBtn.innerText = 'Open';
-    openTodayBtn.addEventListener('click', (ev) => { try { ev.stopPropagation(); if (!isFeatureEnabled('openToday')) { showTrialExpiredModal('Open Today'); return; } showTodayFormsModal(); } catch (e) { console.warn('openTodayBtn failed', e); } });
+    openTodayBtn.addEventListener('click', (ev) => {
+      try {
+        ev && ev.stopPropagation && ev.stopPropagation();
+        if (!isFeatureEnabled('openToday')) { showTrialExpiredModal('Open Today'); return; }
+        showTodayFormsModal();
+      } catch (e) { console.warn('openTodayBtn failed', e); }
+    });
     todayActions.appendChild(openTodayBtn);
     const exportTodayBtn = document.createElement('button'); exportTodayBtn.className = 'glowBtn'; exportTodayBtn.style.marginLeft = '8px'; exportTodayBtn.innerText = "Export All Today's Forms (PDF)";
     exportTodayBtn.addEventListener('click', async (ev) => {
@@ -854,6 +1282,8 @@ function renderStatsCards(entries) {
     // insert statsRow at the top of center
     center.insertBefore(statsRow, center.firstChild);
 
+      
+
     // Extra row: smaller Dropbox-powered cards (Signed-in user, Storage)
     try {
       // remove any previously inserted extra rows to avoid duplicates
@@ -922,12 +1352,60 @@ function renderStatsCards(entries) {
           </div>
         `;
         extraRow.appendChild(batchCard);
+        // compact Security card: App lock (shows Add password when available)
+        try {
+          const secSmall = document.createElement('div');
+          secSmall.className = 'statCard small securityCard';
+          secSmall.style.minWidth = '160px';
+          secSmall.style.maxWidth = '200px';
+          secSmall.innerHTML = `
+            <div style="display:flex;gap:12px;align-items:center;width:100%">
+              <div style="font-size:20px">🔒</div>
+              <div style="flex:1;min-width:0">
+                <div class="statHeader">App lock</div>
+                <div class="statValue smallLockState">—</div>
+              </div>
+            </div>
+            <div style="margin-top:8px;display:flex;gap:8px;justify-content:flex-end">
+              <button class="glowBtn" id="manageSecurityBtn" style="padding:6px 10px;font-size:12px">Manage</button>
+            </div>
+          `;
+          extraRow.appendChild(secSmall);
+          // set initial state
+          try {
+            const stateEl = secSmall.querySelector('.smallLockState');
+            if (!isFeatureEnabled('securityCard')) { if (stateEl) stateEl.innerText = 'Expired'; }
+            else {
+              const has = Boolean(localStorage.getItem('bravo_lock_v1'));
+              if (stateEl) stateEl.innerText = has ? 'Locked' : 'Add password';
+            }
+          } catch (e) {}
+          // wire manage button
+          try {
+            const m = secSmall.querySelector('#manageSecurityBtn');
+            if (m) m.addEventListener('click', (ev) => { try { ev && ev.stopPropagation && ev.stopPropagation(); if (!isFeatureEnabled('securityCard')) { showTrialExpiredModal('App lock'); return; } showSecurityModal(); } catch (e) { console.warn('manageSecurityBtn failed', e); } });
+          } catch (e) {}
+          // make the whole small card clickable (open add/change/remove modal)
+          try {
+            secSmall.style.cursor = 'pointer';
+            secSmall.style.pointerEvents = 'auto';
+            secSmall.addEventListener('click', (ev) => {
+              try {
+                ev && ev.stopPropagation && ev.stopPropagation();
+                if (!isFeatureEnabled('securityCard')) { showTrialExpiredModal('App lock'); return; }
+                showSecurityModal();
+              } catch (e) { console.warn('securityCard click failed', e); }
+            });
+          } catch (e) {}
+        } catch (e) { console.warn('compact security card failed', e); }
         // make entire card surface clickable and wire the internal button
         try {
           batchCard.style.cursor = 'pointer';
           batchCard.style.pointerEvents = 'auto';
           batchCard.addEventListener('click', (ev) => {
             try {
+              ev && ev.stopPropagation && ev.stopPropagation();
+              if (!isFeatureEnabled('batchExport')) { showTrialExpiredModal('Batch export'); return; }
               // if user clicked a control inside the card (like a button), let that event run normally
               // but if they clicked the card surface, open the year picker
               showBatchYearPicker(currentEntries || []);
@@ -936,7 +1414,7 @@ function renderStatsCards(entries) {
           const b = batchCard.querySelector('#batchExportBtn');
           if (b) {
             b.addEventListener('click', (ev) => {
-              try { ev.stopPropagation(); showBatchYearPicker(currentEntries || []); } catch (e) { console.warn('batchExport button failed', e); }
+              try { ev.stopPropagation(); if (!isFeatureEnabled('batchExport')) { showTrialExpiredModal('Batch export'); return; } showBatchYearPicker(currentEntries || []); } catch (e) { console.warn('batchExport button failed', e); }
             });
           }
         } catch (e) { console.warn('batchExport wiring failed', e); }
@@ -985,62 +1463,76 @@ function renderStatsCards(entries) {
       // Async populate user & storage info
       (async () => {
         try {
-          // account info
+          // account info (respect trial gating)
           try {
             const acc = await (window.electronAPI && window.electronAPI.drive && typeof window.electronAPI.drive.getAccount === 'function' ? window.electronAPI.drive.getAccount() : Promise.resolve(null));
-            if (acc && acc.ok && acc.info) {
-              const info = acc.info;
-              const name = (info.name && info.name.display_name) ? info.name.display_name : (info.email || 'User');
-              const email = info.email || '';
-              const avatarImg = userCard.querySelector('img.statAvatar');
-              const nameEl = userCard.querySelector('.smallName');
-              const labelEl = userCard.querySelector('.statLabel');
-              if (avatarImg && info.profile_photo_url) avatarImg.src = info.profile_photo_url; else if (avatarImg) avatarImg.style.display = 'none';
-              if (nameEl) nameEl.innerText = name;
-              if (labelEl) labelEl.innerText = email;
+            const avatarImg = userCard.querySelector('img.statAvatar');
+            const nameEl = userCard.querySelector('.smallName');
+            const labelEl = userCard.querySelector('.statLabel');
+            if (!isFeatureEnabled('userCard')) {
+              try { if (nameEl) nameEl.innerText = 'Expired'; } catch (e) {}
+              try { if (labelEl) labelEl.innerText = ''; } catch (e) {}
+              try { if (avatarImg) avatarImg.style.display = 'none'; } catch (e) {}
+            } else {
+              if (acc && acc.ok && acc.info) {
+                const info = acc.info;
+                const name = (info.name && info.name.display_name) ? info.name.display_name : (info.email || 'User');
+                const email = info.email || '';
+                try { if (avatarImg && info.profile_photo_url) avatarImg.src = info.profile_photo_url; else if (avatarImg) avatarImg.style.display = 'none'; } catch (e) {}
+                try { if (nameEl) nameEl.innerText = name; } catch (e) {}
+                try { if (labelEl) labelEl.innerText = email; } catch (e) {}
+              }
             }
           } catch (e) { /* ignore account fetch failures */ }
 
-          // storage info (debug/quota)
+          // storage info (debug/quota) (respect trial gating)
           try {
-            const dbg = await (window.electronAPI && window.electronAPI.drive && typeof window.electronAPI.drive.getDebug === 'function' ? window.electronAPI.drive.getDebug() : Promise.resolve(null));
-            let used = 0, total = 0;
-            if (dbg && dbg.ok && dbg.info) {
-              const info = dbg.info;
-              if (info.quota) {
-                used = info.quota.used_bytes || info.quota.used || 0;
-                total = (info.quota.allocation && (info.quota.allocation.allocated_bytes || info.quota.allocation)) || info.quota.allocated_bytes || 0;
-              } else if (info.usage) {
-                used = info.usage.used || info.usage.used_bytes || 0;
-                total = info.usage.total || 0;
-              } else if (typeof info.space_used !== 'undefined') {
-                used = info.space_used || 0; total = info.space_total || 0;
-              }
-            }
-            if (total > 0) {
-              const pct = Math.max(0, Math.min(100, Math.round((used / total) * 100)));
-              const formatStorage = (bytes) => {
-                try {
-                  const gb = bytes / 1024 / 1024 / 1024;
-                  if (gb >= 1) return gb.toFixed(1) + ' GB';
-                  const mb = bytes / 1024 / 1024;
-                  return mb.toFixed(1) + ' MB';
-                } catch (e) { return '0.0 GB'; }
-              };
-              const numbers = storageCard.querySelector('.storageNumbers');
-              const fill = storageCard.querySelector('.storageFill');
-              if (numbers) numbers.innerText = `${formatStorage(used)} / ${formatStorage(total)}`;
-              if (fill) fill.style.width = pct + '%';
+            const numbers = storageCard.querySelector('.storageNumbers');
+            const fill = storageCard.querySelector('.storageFill');
+            if (!isFeatureEnabled('storageCard')) {
+              try { if (numbers) numbers.innerText = 'Expired'; } catch (e) {}
+              try { if (fill) fill.style.width = '0%'; } catch (e) {}
             } else {
-              const numbers = storageCard.querySelector('.storageNumbers'); if (numbers) numbers.innerText = 'Unknown';
+              const dbg = await (window.electronAPI && window.electronAPI.drive && typeof window.electronAPI.drive.getDebug === 'function' ? window.electronAPI.drive.getDebug() : Promise.resolve(null));
+              let used = 0, total = 0;
+              if (dbg && dbg.ok && dbg.info) {
+                const info = dbg.info;
+                if (info.quota) {
+                  used = info.quota.used_bytes || info.quota.used || 0;
+                  total = (info.quota.allocation && (info.quota.allocation.allocated_bytes || info.quota.allocation)) || info.quota.allocated_bytes || 0;
+                } else if (info.usage) {
+                  used = info.usage.used || info.usage.used_bytes || 0;
+                  total = info.usage.total || 0;
+                } else if (typeof info.space_used !== 'undefined') {
+                  used = info.space_used || 0; total = info.space_total || 0;
+                }
+              }
+              if (total > 0) {
+                const pct = Math.max(0, Math.min(100, Math.round((used / total) * 100)));
+                const formatStorage = (bytes) => {
+                  try {
+                    const gb = bytes / 1024 / 1024 / 1024;
+                    if (gb >= 1) return gb.toFixed(1) + ' GB';
+                    const mb = bytes / 1024 / 1024;
+                    return mb.toFixed(1) + ' MB';
+                  } catch (e) { return '0.0 GB'; }
+                };
+                try { if (numbers) numbers.innerText = `${formatStorage(used)} / ${formatStorage(total)}`; } catch (e) {}
+                try { if (fill) fill.style.width = pct + '%'; } catch (e) {}
+              } else {
+                try { if (numbers) numbers.innerText = 'Unknown'; } catch (e) {}
+              }
             }
           } catch (e) { /* ignore storage fetch failures */ }
 
-          // Manage button opens existing manage modal if available
+          // Manage button opens existing manage modal if available (respect gating)
           try {
             const mbtn = document.getElementById('manageStorageBtn');
-            if (mbtn) mbtn.addEventListener('click', () => { try { if (typeof showManageConnectionModal === 'function') return showManageConnectionModal(); if (window.electronAPI && typeof window.electronAPI.revealInFolder === 'function') window.electronAPI.revealInFolder(''); } catch (e) {} });
-          } catch (e) {}
+            if (mbtn) mbtn.addEventListener('click', (ev) => { try { ev && ev.stopPropagation && ev.stopPropagation(); if (!isFeatureEnabled('storageCard')) { showTrialExpiredModal('Storage'); return; } if (typeof showManageConnectionModal === 'function') return showManageConnectionModal(); if (window.electronAPI && typeof window.electronAPI.revealInFolder === 'function') window.electronAPI.revealInFolder(''); } catch (e) {} });
+          } catch (e) { }
+          // make clicking the cards themselves show trial expired modal when gated
+          try { if (userCard) userCard.addEventListener('click', (ev) => { try { ev && ev.stopPropagation && ev.stopPropagation(); if (!isFeatureEnabled('userCard')) { showTrialExpiredModal('User info'); return; } } catch (e) {} }); } catch (e) {}
+          try { if (storageCard) storageCard.addEventListener('click', (ev) => { try { ev && ev.stopPropagation && ev.stopPropagation(); if (!isFeatureEnabled('storageCard')) { showTrialExpiredModal('Storage'); return; } const mbtn = document.getElementById('manageStorageBtn'); if (mbtn) mbtn.click(); } catch (e) {} }); } catch (e) {}
         } catch (e) { /* overall extraRow population error */ }
       })();
     } catch (e) { console.warn('extra stats row creation failed', e); }
@@ -2128,17 +2620,18 @@ function showYearFormsModal(year) {
           const actions = document.createElement('div'); actions.style.display = 'flex'; actions.style.gap = '8px';
 
           const open = document.createElement('button'); open.innerText = 'Open';
-          open.addEventListener('click', async () => {
-            try {
-              const r = await window.electronAPI.drive.downloadToTemp(ent.path_lower, ent.name);
-              if (!r || !r.ok || !r.path) return showNotification('Open failed', (r && r.error) || 'Download failed', 'error');
-              const localEntry = { title: getFriendlyTitle(ent), meta: { filePath: r.path }, _overlayZ: 31000 };
-              // Keep the year modal overlay in the DOM; open the entry modal above it
-              try { await openEntryModal(localEntry); } catch (e) { console.warn('openEntryModal failed', e); }
-              // Best-effort cleanup of the temp file after the entry modal closes
-              try { await window.electronAPI.drive.deleteLocalForm(r.path); } catch (e) {}
-            } catch (e) { console.warn('Open action failed', e); showNotification('Open failed', String(e), 'error'); }
-          });
+            open.addEventListener('click', async () => {
+              try {
+                if (!isFeatureEnabled('openToday')) { showTrialExpiredModal('Open Today'); return; }
+                const r = await window.electronAPI.drive.downloadToTemp(ent.path_lower, ent.name);
+                if (!r || !r.ok || !r.path) return showNotification('Open failed', (r && r.error) || 'Download failed', 'error');
+                const localEntry = { title: getFriendlyTitle(ent), meta: { filePath: r.path }, _overlayZ: 31000 };
+                // Keep the year modal overlay in the DOM; open the entry modal above it
+                try { await openEntryModal(localEntry); } catch (e) { console.warn('openEntryModal failed', e); }
+                // Best-effort cleanup of the temp file after the entry modal closes
+                try { await window.electronAPI.drive.deleteLocalForm(r.path); } catch (e) {}
+              } catch (e) { console.warn('Open action failed', e); showNotification('Open failed', String(e), 'error'); }
+            });
 
           actions.appendChild(open);
           const infoBtn = document.createElement('button'); infoBtn.innerText = 'Info'; infoBtn.title = 'Preview or select this file for batch export'; infoBtn.addEventListener('click', () => { try { showNotification('File', ent.name || getFriendlyTitle(ent), ''); } catch (e) {} });
@@ -2241,6 +2734,7 @@ function showYearFormsModal(year) {
     // Batch export button handler
     exportBtn.addEventListener('click', async () => {
       try {
+        if (!isFeatureEnabled('batchExport')) { showTrialExpiredModal('Batch export'); return; }
         if (!selectedSet.size) return;
         exportBtn.disabled = true; exportBtn.innerText = 'Preparing...';
         try { showSpinner('Preparing batch export...'); } catch (e) {}

@@ -1,2 +1,87 @@
-Export failed
-Error: ERR_INVALID_URL (-300) loading 'data:text/html;charset=utf-8,%3C!doctype%20html%3E%3Chtml%3E%3Chead%3E%3Cmeta%20charset%3D%22utf-8%22%3E%3Cstyle%3Ehtml%2Cbody%7Bbackground%3A%23fff%3Bcolor%3A%23000%3Bmargin%3A0%3Bpadding%3A0%7D%20.page%7Bpage-break-after%3Aalways%3Bpadding%3A18px%7D%3C%2Fstyle%3E%3C%2Fhead%3E%3Cbody%3E%3Cdiv%20class%3D%22page%22%3E%3C!doctype%20html%3E%3Chtml%3E%3Chead%3E%3Cmeta%20charset%3D%22utf-8%22%3E%0A%20%20%3Cstyle%3E%0A%20%20%20%20%40page%20%7B%20size%3A%20A4%20landscape%3B%20margin%3A%206mm%3B%20%7D%0A%20%20%20%20body%20%7B%20font-family%3A%20'Inter'%2C%20Arial%2C%20sans-serif%3B%20margin%3A%200%3B%20padding%3A%200%3B%20color%3A%20%231e293b%3B%20background%3A%20%23fff%3B%20font-size%3A%208px%3B%20line-height%3A%201.1%3B%20%7D%0A%20%20%20%20%0A%20%20%20%20.headerSection%20%7B%20display%3A%20flex%3B%20align-items%3A%20center%3B%20justify-content%3A%20space-between%3B%20border-bottom%3A%202px%20solid%20%23185a9d%3B%20padding-bottom%3A%206px%3B%20margin-bottom%3A%208px%3B%20%7D%0A%20%20%20%20.branding%20%7B%20display%3A%20flex%3B%20align-items%3A%20center%3B%20gap%3A%2012px%3B%20%7D%0A%20%20%20%20.logo%20%7B%20height%3A%2048px%3B%20width%3A%20auto%3B%20object-fit%3A%20contain%3B%20%7D%0A%20%20%20%20.companyName%20%7B%20font-weight%3A%20800%3B%20font-size%3A%2015px%3B%20color%3A%20%23185a9d%3B%20text-transform%3A%20uppercase%3B%20%7D%0A%20%20%20%20%0A%20%20%20%20.title%20%7B%20text-align%3A%20center%3B%20font-weight%3A%20900%3B%20font-size%3A%2011px%3B%20text-transform%3A%20uppercase%3B%20margin%3A%208px%200%3B%20color%3A%20%230f172a%3B%20letter-spacing%3A%200.5px%3B%20%7D%0A%0A%20%20%20%20.table%20%7B%20border%3A%201.5px%20solid%20%23334155%3B%20display%3A%20flex%3B%20flex-direction%3A%20column%3B%20width%3A%20100%25%3B%20border-bottom%3A%20none%3B%20%7D%0A%20%20%20%20.thead-group%20%7B%20display%3A%20flex%3B%20background%3A%20%23f1f5f9%3B%20border-bottom%3A%201.5px%20solid%20%23334155%3B%20align-items%3A%20stretch%3B%20%7D%0A%20%20%20%20.thead-detail%20%7B%20display%3A%20flex%3B%20background%3A%20%23f8fafc%3B%20border-bot'
+/**
+ * Injects an animated, aggressive PCB trace background into the app root.
+ */
+function injectCyberTracesBackground() {
+  try {
+    if (document.getElementById('cyberTracesStyles')) return;
+
+    // Optimized SVG with glowing traces and animated pulses
+    const svg = `
+    <svg xmlns='http://www.w3.org/2000/svg' width='400' height='400' viewBox='0 0 400 400'>
+      <defs>
+        <filter id='glow'>
+          <feGaussianBlur stdDeviation='1.5' result='coloredBlur'/>
+          <feMerge>
+            <feMergeNode in='coloredBlur'/><feMergeNode in='SourceGraphic'/>
+          </feMerge>
+        </filter>
+      </defs>
+      <g stroke='%2300f3ff' stroke-width='1' fill='none' opacity='0.2' filter='url(#glow)'>
+        <!-- Main horizontal traces -->
+        <path d='M0 100 h150 l50 50 h200' />
+        <path d='M0 300 h100 l50 -50 h250' />
+        <!-- Vertical connectors -->
+        <path d='M200 0 v150' />
+        <path d='M150 400 v-150 l-50 -50' />
+        <!-- Solder Nodes -->
+        <circle cx='150' cy='100' r='3' fill='%2300f3ff' />
+        <circle cx='200' cy='150' r='3' fill='%23bd00ff' />
+        <circle cx='100' cy='300' r='3' fill='%2300f3ff' />
+      </g>
+    </svg>`;
+
+    const css = `
+      #cyberTracesBG {
+        position: fixed;
+        inset: 0;
+        z-index: -1;
+        pointer-events: none;
+        background-color: #020205;
+        background-image: 
+          linear-gradient(rgba(0, 243, 255, 0.03) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(0, 243, 255, 0.03) 1px, transparent 1px),
+          url("data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}");
+        background-size: 100px 100px, 100px 100px, 400px 400px;
+        opacity: 0.4;
+      }
+
+      /* Scanning line overlay */
+      #cyberTracesBG::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(to bottom, transparent, rgba(0, 243, 255, 0.1), transparent);
+        background-size: 100% 200px;
+        animation: cyberScan 8s linear infinite;
+      }
+
+      @keyframes cyberScan {
+        from { background-position: 0 -200px; }
+        to { background-position: 0 100%; }
+      }
+
+      /* Ensure the app is transparent enough to see the traces */
+      body { background: transparent !important; }
+      #app { background: rgba(5, 7, 12, 0.8) !important; backdrop-filter: blur(12px); }
+    `;
+
+    // Create a dedicated background div so we don't interfere with body::before
+    const bgDiv = document.createElement('div');
+    bgDiv.id = 'cyberTracesBG';
+    document.body.prepend(bgDiv);
+
+    const st = document.createElement('style');
+    st.id = 'cyberTracesStyles';
+    st.innerHTML = css;
+    document.head.appendChild(st);
+    
+    console.log('⚡ Cyber Protocol: Background Traces Online');
+  } catch (e) { 
+    console.warn('injectCyberTracesBackground failed', e); 
+  }
+}
+
+// Initialize on load
+window.addEventListener('DOMContentLoaded', injectCyberTracesBackground);
+
+One small tip: Make sure your main #app or container has some transparency (e.g., rgba(0,0,0,0.7)) so the traces can shine through from the background!
