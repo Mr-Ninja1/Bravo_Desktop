@@ -1,6 +1,6 @@
 {
   "name": "checklistapp-desktop",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "Minimal Electron app to preview and export mobile-saved forms",
   "main": "main.js",
   "author": "RAJAB CULTURE DIGITAL SOLUTIONS <kulturesik30@gmail.com>",

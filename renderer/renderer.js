@@ -1316,6 +1316,40 @@ function checkAgreementOnStartup() {
 // run agreement check after startup
 try { setTimeout(checkAgreementOnStartup, 2000); } catch (e) {}
 
+// Release notes modal for new release
+function showReleaseModal(version) {
+  try {
+    if (document.getElementById('bravoReleaseOverlay')) return;
+    const overlay = document.createElement('div'); overlay.id = 'bravoReleaseOverlay'; overlay.className = 'modalOverlay';
+    overlay.style.position = 'fixed'; overlay.style.inset = '0'; overlay.style.display = 'flex'; overlay.style.alignItems = 'center'; overlay.style.justifyContent = 'center';
+    overlay.style.background = 'rgba(0,0,0,0.75)'; overlay.style.setProperty('z-index', '2000000', 'important');
+    const box = document.createElement('div'); box.className = 'modalBox'; box.style.minWidth = '420px'; box.style.maxWidth = '92%'; box.style.padding = '20px'; box.style.background = '#02101a'; box.style.color = '#e6fbff'; box.style.borderRadius = '12px'; box.style.setProperty('z-index', '2000001', 'important');
+    const h = document.createElement('div'); h.style.fontWeight = '900'; h.style.marginBottom = '12px'; h.style.fontSize = '20px'; h.innerText = `Bravo — Release ${version}`;
+    const p = document.createElement('div'); p.style.marginBottom = '12px'; p.style.lineHeight = '1.45'; p.style.color = '#dffbff'; p.style.fontSize = '14px';
+    p.innerText = 'Welcome to the new release. This update includes UI polish, improved exports, storage alerts, and security enhancements.';
+    const list = document.createElement('ul'); list.style.margin = '8px 0 12px 18px'; list.style.color = '#bfeeff';
+    const items = ['Futuristic splash and UI polish', 'In-app purchase landing + contact flow', 'Storage-threshold alerts & Buy CTA', 'App-lock and product-key unlock improvements', 'Batch export improvements and tutorials'];
+    items.forEach(t => { try { const li = document.createElement('li'); li.innerText = t; list.appendChild(li); } catch (e) {} });
+    const actions = document.createElement('div'); actions.style.display = 'flex'; actions.style.justifyContent = 'flex-end'; actions.style.gap = '8px';
+    const details = document.createElement('button'); details.className = 'glowBtn'; details.innerText = 'View details';
+    const close = document.createElement('button'); close.innerText = 'Continue'; close.className = 'glowBtn';
+    actions.appendChild(details); actions.appendChild(close);
+    box.appendChild(h); box.appendChild(p); box.appendChild(list); box.appendChild(actions); overlay.appendChild(box); document.body.appendChild(overlay);
+
+    details.addEventListener('click', () => { try { if (typeof showAgreementModal === 'function') showAgreementModal(true); } catch (e) {} });
+    close.addEventListener('click', () => { try { const el = document.getElementById('bravoReleaseOverlay'); if (el && el.parentNode) el.parentNode.removeChild(el); } catch (e) {} });
+  } catch (e) { console.warn('showReleaseModal failed', e); }
+}
+
+// Show release modal once after startup if version changed
+try {
+  const prev = localStorage.getItem('bravo_last_release');
+  const cur = (function(){ try { return require('../package.json').version || '0.0.4'; } catch (e) { try { return '0.0.4'; } catch (ee) { return '0.0.4'; } } })();
+  if (!prev || prev !== cur) {
+    try { setTimeout(() => showReleaseModal(cur), 1400); localStorage.setItem('bravo_last_release', cur); } catch (e) {}
+  }
+} catch (e) {}
+
 // --- Internet connectivity helpers
 async function isOnline(checkUrl) {
   try {
