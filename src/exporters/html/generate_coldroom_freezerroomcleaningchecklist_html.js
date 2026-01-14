@@ -1,5 +1,4 @@
-const fs = require('fs');
-const path = require('path');
+// Node path/fs removed for mobile; prefer payload.assets.logoDataUri
 
 const escapeHtml = (s) => String(s === null || s === undefined ? '' : s)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -16,60 +15,69 @@ const normalizeIncoming = (incoming) => {
 const normalizeSignature = (v) => {
   if (!v) return null;
   if (typeof v === 'string') {
-    if (v.startsWith('data:')) return v;
-    const compact = v.replace(/\s+/g, '');
-    if (compact.length > 150) return `data:image/png;base64,${compact}`;
+    const s = v.trim();
+    if (!s) return null;
+    if (s.startsWith('data:')) return s;
+    if (s.startsWith('http:') || s.startsWith('https:') || s.startsWith('file:') || s.startsWith('blob:')) return s;
+    const compact = s.replace(/\s+/g, '');
+    const base64ish = /^[A-Za-z0-9+/=]+$/;
+    if (compact.length > 100 && base64ish.test(compact)) return `data:image/png;base64,${compact}`;
     return null;
   }
   if (typeof v === 'object') {
     const maybe = v.uri || v.data || v.base64 || v.signature || v.dataUri;
     if (maybe && typeof maybe === 'string') {
-      if (maybe.indexOf('data:') === 0) return maybe;
-      const compact = maybe.replace(/\s+/g, '');
-      if (compact.length > 100) return `data:image/png;base64,${compact}`;
+      const s = maybe.trim();
+      if (s.startsWith('data:')) return s;
+      if (s.startsWith('http:') || s.startsWith('https:') || s.startsWith('file:') || s.startsWith('blob:')) return s;
+      const compact = s.replace(/\s+/g, '');
+      const base64ish = /^[A-Za-z0-9+/=]+$/;
+      if (compact.length > 100 && base64ish.test(compact)) return `data:image/png;base64,${compact}`;
     }
   }
   return null;
 };
 
-const renderSignatureThumb = (v, w = 180, h = 45) => {
+const renderSignatureThumb = (v, w = 120, h = 45) => {
   const uri = normalizeSignature(v);
-  if (!uri) return `<div style="border-bottom: 1px solid #ccc; width: 140px; height: 15px; margin-top: 10px;"></div>`;
-  return `<img src="${uri}" style="max-width:${w}px; max-height:${h}px; width:auto; display:block; object-fit:contain; mix-blend-mode: multiply;"/>`;
+  if (!uri) return `<div style="border-bottom: 1px solid #ccc; width:${Math.min(w,140)}px; height:${Math.max(14, Math.round(h/3))}px; margin-top: 6px;"></div>`;
+  return `<img src="${uri}" style="max-width:${w}px; max-height:${h}px; width:auto; display:block; object-fit:contain;"/>`;
 };
 
 const getLogoDataUri = (p) => {
   if (!p) return null;
   if (p.assets && p.assets.logoDataUri) return p.assets.logoDataUri;
-  const candidates = [path.join(process.cwd(), 'renderer', 'assets', 'logo.jpeg'), path.join(process.cwd(), 'assets', 'logo.jpeg')];
-  for (const c of candidates) { try { if (fs.existsSync(c)) { const b=fs.readFileSync(c); const ext=path.extname(c).toLowerCase(); const mime=ext==='.png'?'image/png':'image/jpeg'; return `data:${mime};base64,${b.toString('base64')}`; } } catch(e){} }
+  if (p.metadata && p.metadata.logo) return p.metadata.logo;
   return null;
 };
 
 module.exports = function generate(payloadWrapper) {
   const p = normalizeIncoming(payloadWrapper);
   const meta = p.metadata || {};
-  const WEEK_DAYS = ['Sun','Mon','Tue','Wed','Thurs','Fri','Sat'];
-  
-  // Professional A4 Landscape Calibration
+  const WEEK_DAYS = ['Sun','Mon','Tue','Wed','Thur','Fri','Sat'];
+
+  // Match presentational widths: AREA, FREQ, DAY_GROUP made of CHECK + NAME + SUP_SIGN
   const COL = {
-    AREA: 180,
-    FREQ: 100,
-    DAY_GROUP: 110, // (7 * 110 = 770)
-    CHECK: 30,
-    SIG: 80
+    AREA: 220,
+    FREQ: 80,
+    CHECK: 40,
+    NAME: 90,
+    SUP_SIGN: 110
   };
+  COL.DAY_GROUP = COL.CHECK + COL.NAME + COL.SUP_SIGN; // 240
 
   const rows = Array.isArray(p.formData) ? p.formData : (Array.isArray(p.data) ? p.data : []);
   const logo = getLogoDataUri(p);
+  const containerWidth = COL.AREA + COL.FREQ + (COL.DAY_GROUP * WEEK_DAYS.length);
 
   const rowsHtml = (rows.length ? rows : Array.from({length: 8}).map(()=>({}))).map((r,idx)=>{
     const dayCols = WEEK_DAYS.map(d => {
-      const c = (r.checks && r.checks[d]) ? r.checks[d] : { checked:false, cleanedBy: '' };
+      const c = (r.checks && r.checks[d]) ? r.checks[d] : { checked:false, cleanedBy: '', supSign: '' };
       return `
         <div style="display:flex; width:${COL.DAY_GROUP}px; border-right:1px solid #000; align-items:stretch">
           <div style="width:${COL.CHECK}px; padding:4px; text-align:center; border-right:1px solid #000; font-weight:bold; display:flex; align-items:center; justify-content:center">${c.checked ? '✓' : ''}</div>
-          <div style="flex:1; padding:4px; text-align:center; font-size:10px; display:flex; align-items:center; justify-content:center; overflow:hidden">${escapeHtml(c.cleanedBy || '')}</div>
+          <div style="width:${COL.NAME}px; padding:4px; text-align:center; font-size:10px; display:flex; align-items:center; justify-content:center; overflow:hidden">${escapeHtml(c.cleanedBy || '')}</div>
+          <div style="width:${COL.SUP_SIGN}px; padding:4px; text-align:center; display:flex; align-items:center; justify-content:center">${renderSignatureThumb(c.supSign || c.supNameSign || c.supSignUri, COL.SUP_SIGN - 8, 40)}</div>
         </div>`;
     }).join('');
 
@@ -85,7 +93,7 @@ module.exports = function generate(payloadWrapper) {
     @page{size:A4 landscape; margin:6mm}
     *{box-sizing: border-box;}
     body{font-family:'Inter', Arial, sans-serif; margin:0; padding:0; color:#111}
-    .container{width:1060px; margin:0 auto; padding:10px}
+    .container{width:${containerWidth}px; margin:0 auto; padding:10px}
     .docHeader{display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid #000; padding-bottom:8px; margin-bottom:10px}
     .mainTitle{font-size:18px; font-weight:900; text-align:center; margin:10px 0; text-transform:uppercase}
     .metaBox{border:1.5px solid #000; padding:8px; display:flex; gap:20px; background:#f9fafb; font-size:12px; margin-bottom:10px}
@@ -130,25 +138,33 @@ module.exports = function generate(payloadWrapper) {
               <div style="padding:4px; border-bottom:1px solid #000; font-weight:900; background:#d1d5db; text-align:center; font-size:11px">${d}</div>
               <div style="display:flex; flex:1">
                 <div style="width:${COL.CHECK}px; border-right:1px solid #000; font-size:8px; display:flex; align-items:center; justify-content:center">✓</div>
-                <div style="flex:1; font-size:8px; display:flex; align-items:center; justify-content:center">Cleaned By</div>
+                <div style="width:${COL.NAME}px; font-size:8px; display:flex; align-items:center; justify-content:center">Cleaned By</div>
+                <div style="width:${COL.SUP_SIGN}px; font-size:8px; display:flex; align-items:center; justify-content:center; border-right:0">SUP SIGN</div>
               </div>
             </div>`).join('')}
         </div>
         ${rowsHtml}
       </div>
 
-      <div class="sigSection">
-        <div class="sigBox">
-          <div style="font-size:10px; font-weight:800; color:#555">VERIFIED BY: HSEQ MANAGER</div>
-          <div style="min-height:45px; display:flex; align-items:center">
-            ${renderSignatureThumb(meta.hseqSign || meta.hseqManager)}
-          </div>
+      <div style="margin-top:12px">
+        <div style="display:flex; border-top:1px solid #000; margin-top:6px; padding-top:6px">
+          <div style="width:${COL.AREA + COL.FREQ}px; background:#f3f4f6; padding:6px; font-weight:800;">HSEQ SIGN</div>
+          ${WEEK_DAYS.map(d => `
+            <div style="display:flex; border-right:1px solid #000">
+              <div style="width:${COL.CHECK}px; border-right:1px solid #000; background:#f3f4f6; display:flex; align-items:center; justify-content:center">${d}</div>
+              <div style="width:${COL.NAME + COL.SUP_SIGN}px; padding:6px; display:flex; align-items:center; justify-content:center">${renderSignatureThumb((meta.hseqDaySigns && meta.hseqDaySigns[d]) || null, (COL.NAME + COL.SUP_SIGN) - 8, 45)}</div>
+            </div>
+          `).join('')}
         </div>
-        <div class="sigBox">
-          <div style="font-size:10px; font-weight:800; color:#555">APPROVED BY:</div>
-          <div style="min-height:45px; display:flex; align-items:center">
-            ${renderSignatureThumb(meta.approvedBySign || meta.approvedBy)}
-          </div>
+
+        <div style="display:flex; border-top:1px solid #000; margin-top:6px; padding-top:6px">
+          <div style="width:${COL.AREA + COL.FREQ}px; background:#f3f4f6; padding:6px; font-weight:800;">COMPLEX MANAGER / FSC SIGN</div>
+          ${WEEK_DAYS.map(d => `
+            <div style="display:flex; border-right:1px solid #000">
+              <div style="width:${COL.CHECK}px; border-right:1px solid #000; background:#f3f4f6; display:flex; align-items:center; justify-content:center">${d}</div>
+              <div style="width:${COL.NAME + COL.SUP_SIGN}px; padding:6px; display:flex; align-items:center; justify-content:center">${renderSignatureThumb((meta.managerDaySigns && meta.managerDaySigns[d]) || null, (COL.NAME + COL.SUP_SIGN) - 8, 45)}</div>
+            </div>
+          `).join('')}
         </div>
       </div>
     </div>

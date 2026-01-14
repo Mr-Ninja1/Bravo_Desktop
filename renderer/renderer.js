@@ -21,9 +21,44 @@ let disconnectBtn = null;
 
 // --- Simple local trial / product-key gating
 const LICENSE_KEY = 'bravo_license_v1';
-const TRIAL_DAYS = 0; // configurable trial length
+const TRIAL_DAYS = 5; // configurable trial length (days)
 // URL to a public JSON file listing issued keys. Set to your repo raw URL.
 const KEYS_JSON_URL = 'https://raw.githubusercontent.com/Mr-Ninja1/Bravo_Desktop/main/keys.json';
+// Default purchase landing page (GitHub Pages) — override with window.__PURCHASE_URL if needed
+try { if (typeof window !== 'undefined' && !window.__PURCHASE_URL) window.__PURCHASE_URL = 'https://Mr-Ninja1.github.io/Bravo_Desktop/'; } catch (e) {}
+
+// Helper to open the purchase landing page with optional query params (adds from=app by default)
+function openPurchasePage(params) {
+  try {
+    const base = (typeof window !== 'undefined' && window.__PURCHASE_URL) ? window.__PURCHASE_URL : (PURCHASE_URL || 'https://example.com/buy');
+    let url;
+    try { url = new URL(base); } catch (e) { url = new URL(base, window.location.origin); }
+    const p = Object.assign({ from: 'app' }, (params || {}));
+    Object.keys(p).forEach(k => { try { if (typeof p[k] !== 'undefined' && p[k] !== null) url.searchParams.set(k, String(p[k])); } catch (e) {} });
+    const s = url.toString();
+    if (window.electronAPI && typeof window.electronAPI.openExternal === 'function') return window.electronAPI.openExternal(s);
+    try { window.open(s, '_blank'); } catch (e) {}
+  } catch (e) { console.warn('openPurchasePage failed', e); }
+}
+
+// Helper: create a small premium badge element
+function createPremiumBadge() {
+  try {
+    const b = document.createElement('span');
+    b.className = 'premiumBadge';
+    b.innerText = 'Premium';
+    b.style.display = 'inline-block';
+    b.style.marginLeft = '8px';
+    b.style.padding = '4px 8px';
+    b.style.fontSize = '12px';
+    b.style.fontWeight = '700';
+    b.style.color = '#06283D';
+    b.style.background = 'linear-gradient(90deg,#ffd166,#ff7b7b)';
+    b.style.borderRadius = '999px';
+    b.style.boxShadow = '0 6px 18px rgba(255,160,120,0.12)';
+    return b;
+  } catch (e) { return null; }
+}
 
 // Validate a provided key against a hosted keys.json file.
 async function validateKeyOnline(key, url) {
@@ -92,11 +127,26 @@ function unlockAllWithKey(key) {
 function showTrialExpiredModal(featureReadable) {
   try {
     const PURCHASE_URL = (typeof window !== 'undefined' && window.__PURCHASE_URL) ? window.__PURCHASE_URL : 'https://example.com/buy';
-    const overlay = document.createElement('div'); overlay.className = 'modalOverlay'; overlay.style.zIndex = 62000; overlay.style.background = 'rgba(0,0,0,0.6)';
-    const box = document.createElement('div'); box.className = 'modalBox'; box.style.minWidth = '380px'; box.style.maxWidth = '92%'; box.style.padding = '18px'; box.style.position = 'relative'; box.style.background = '#0b1220'; box.style.color = '#fff'; box.style.borderRadius = '10px';
+    const overlay = document.createElement('div'); overlay.className = 'modalOverlay';
+    overlay.style.position = 'fixed'; overlay.style.inset = '0'; overlay.style.display = 'flex'; overlay.style.alignItems = 'center'; overlay.style.justifyContent = 'center';
+    overlay.style.background = 'rgba(0,0,0,0.6)'; overlay.style.setProperty('z-index', '2000000', 'important');
+    const box = document.createElement('div'); box.className = 'modalBox'; box.style.minWidth = '380px'; box.style.maxWidth = '92%'; box.style.padding = '18px'; box.style.position = 'relative'; box.style.background = '#0b1220'; box.style.color = '#fff'; box.style.borderRadius = '10px'; box.style.setProperty('z-index', '2000001', 'important');
     const h = document.createElement('div'); h.style.fontWeight = '800'; h.style.marginBottom = '8px'; h.style.fontSize = '16px'; h.style.color = '#fff'; h.innerText = `${featureReadable} — Expired`;
     const p = document.createElement('div'); p.style.color = '#e6eefc'; p.style.marginBottom = '12px'; p.style.lineHeight = '1.4';
     p.innerText = "Buy the key from the developer's website or contact the developer directly. Press the 'Buy' button to purchase the key. To activate: click 'Enter key', paste your key, then press 'ACTIVATE'.";
+
+    // Reminder about premium features and author's ideas
+    const reminder = document.createElement('div');
+    reminder.style.marginTop = '12px';
+    reminder.style.padding = '10px';
+    reminder.style.background = 'rgba(255,255,255,0.02)';
+    reminder.style.border = '1px solid rgba(255,255,255,0.03)';
+    reminder.style.borderRadius = '8px';
+    reminder.style.color = '#cfeeff';
+    reminder.innerHTML = '<strong>About premium features</strong><div style="margin-top:6px;font-size:13px;color:#dff6ff">Many of the premium features are ideas and productivity improvements added by the developer. They are available during the trial so you can evaluate them. After the 7-day trial these features will stop working unless activated. You can choose to keep or discard them after trying.</div>';
+    const viewAgreementBtn = document.createElement('button'); viewAgreementBtn.innerText = 'View Agreement'; viewAgreementBtn.className = 'glowBtn'; viewAgreementBtn.style.marginTop = '8px';
+    viewAgreementBtn.addEventListener('click', () => { try { if (typeof showAgreementModal === 'function') showAgreementModal(true); } catch (e) {} });
+    reminder.appendChild(viewAgreementBtn);
 
     // inline entry area (hidden until requested)
     const entryWrap = document.createElement('div'); entryWrap.style.display = 'none'; entryWrap.style.marginTop = '8px';
@@ -110,7 +160,7 @@ function showTrialExpiredModal(featureReadable) {
 
     const actions = document.createElement('div'); actions.style.display = 'flex'; actions.style.justifyContent = 'space-between'; actions.style.gap = '8px'; actions.style.marginTop = '12px';
     const leftActions = document.createElement('div'); leftActions.style.display = 'flex'; leftActions.style.gap = '8px';
-    const buy = document.createElement('button'); buy.id = 'trialBuyBtn'; buy.innerText = 'Buy'; buy.style.background = '#ef4444'; buy.style.color = '#fff'; buy.style.border = 'none'; buy.style.padding = '8px 12px'; buy.style.borderRadius = '8px';
+    const buy = document.createElement('button'); buy.id = 'trialBuyBtn'; buy.innerText = 'Buy features'; buy.style.background = '#ef4444'; buy.style.color = '#fff'; buy.style.border = 'none'; buy.style.padding = '8px 12px'; buy.style.borderRadius = '8px';
     const enter = document.createElement('button'); enter.className = 'glowBtn'; enter.id = 'trialEnterBtn'; enter.innerText = 'Enter key';
     leftActions.appendChild(buy); leftActions.appendChild(enter);
     const rightActions = document.createElement('div'); rightActions.style.display = 'flex'; rightActions.style.gap = '8px';
@@ -118,17 +168,12 @@ function showTrialExpiredModal(featureReadable) {
     rightActions.appendChild(close);
     actions.appendChild(leftActions); actions.appendChild(rightActions);
 
-    box.appendChild(h); box.appendChild(p); box.appendChild(entryWrap); box.appendChild(actions); overlay.appendChild(box); document.body.appendChild(overlay);
+    box.appendChild(h); box.appendChild(p); box.appendChild(reminder); box.appendChild(entryWrap); box.appendChild(actions); overlay.appendChild(box); document.body.appendChild(overlay);
 
     function teardown() { try { document.body.removeChild(overlay); } catch (e) {} }
 
     close.addEventListener('click', () => { try { teardown(); } catch (e) {} });
-    buy.addEventListener('click', () => {
-      try {
-        if (window.electronAPI && typeof window.electronAPI.openExternal === 'function') return window.electronAPI.openExternal(PURCHASE_URL || 'https://example.com/buy');
-        try { window.open(PURCHASE_URL || 'https://example.com/buy', '_blank'); } catch (e) { console.warn('open external failed', e); }
-      } catch (e) { console.warn('buy click failed', e); }
-    });
+    buy.addEventListener('click', () => { try { openPurchasePage({ reason: 'trial' }); } catch (e) { console.warn('buy click failed', e); } });
 
     enter.addEventListener('click', () => {
       try { entryWrap.style.display = entryWrap.style.display === 'none' ? 'block' : 'none'; if (entryWrap.style.display === 'block') keyInput.focus(); } catch (e) { console.warn('enter key show failed', e); }
@@ -201,8 +246,10 @@ function removeAppLockPassword() {
 
 function showSecurityModal() {
   try {
-    const overlay = document.createElement('div'); overlay.className = 'modalOverlay'; overlay.style.zIndex = 62010; overlay.style.background = 'rgba(0,0,0,0.6)';
-    const box = document.createElement('div'); box.className = 'modalBox'; box.style.minWidth = '360px'; box.style.padding = '14px'; box.style.background = '#fff'; box.style.color = '#000'; box.style.borderRadius = '8px';
+    const overlay = document.createElement('div'); overlay.className = 'modalOverlay';
+    overlay.style.position = 'fixed'; overlay.style.inset = '0'; overlay.style.display = 'flex'; overlay.style.alignItems = 'center'; overlay.style.justifyContent = 'center';
+    overlay.style.background = 'rgba(0,0,0,0.6)'; overlay.style.setProperty('z-index', '2000000', 'important');
+    const box = document.createElement('div'); box.className = 'modalBox'; box.style.minWidth = '360px'; box.style.padding = '14px'; box.style.background = '#fff'; box.style.color = '#000'; box.style.borderRadius = '8px'; box.style.setProperty('z-index', '2000001', 'important');
     const h = document.createElement('div'); h.style.fontWeight = '800'; h.style.marginBottom = '8px'; h.innerText = 'App lock — Password';
     const p = document.createElement('div'); p.style.marginBottom = '8px'; p.style.color = '#fff'; p.innerText = 'Set or change an app-lock password. You can also remove it.';
 
@@ -266,8 +313,10 @@ function showSecurityModal() {
 // Informational modal that explains app-lock and links to Manage (adds password)
 function showSecurityInfoModal() {
   try {
-    const overlay = document.createElement('div'); overlay.className = 'modalOverlay'; overlay.style.zIndex = 62011; overlay.style.background = 'rgba(0,0,0,0.6)';
-    const box = document.createElement('div'); box.className = 'modalBox'; box.style.minWidth = '380px'; box.style.padding = '14px'; box.style.background = '#fff'; box.style.color = '#000'; box.style.borderRadius = '8px';
+    const overlay = document.createElement('div'); overlay.className = 'modalOverlay';
+    overlay.style.position = 'fixed'; overlay.style.inset = '0'; overlay.style.display = 'flex'; overlay.style.alignItems = 'center'; overlay.style.justifyContent = 'center';
+    overlay.style.background = 'rgba(0,0,0,0.6)'; overlay.style.setProperty('z-index', '2000000', 'important');
+    const box = document.createElement('div'); box.className = 'modalBox'; box.style.minWidth = '380px'; box.style.padding = '14px'; box.style.background = '#fff'; box.style.color = '#000'; box.style.borderRadius = '8px'; box.style.setProperty('z-index', '2000001', 'important');
     const h = document.createElement('div'); h.style.fontWeight = '800'; h.style.marginBottom = '8px'; h.innerText = 'Protect your app';
     const p = document.createElement('div'); p.style.marginBottom = '12px'; p.style.color = '#333'; p.style.lineHeight = '1.4';
     p.innerText = "Add a password to lock the app and protect your data. This prevents others from opening the app without the password.";
@@ -290,13 +339,13 @@ function showUnlockModal() {
     const overlay = document.createElement('div');
     overlay.style.position = 'fixed';
     overlay.style.inset = '0';
-    overlay.style.zIndex = 65000;
     overlay.style.background = 'rgba(2,6,23,0.92)';
     overlay.style.display = 'flex';
     overlay.style.alignItems = 'center';
     overlay.style.justifyContent = 'center';
     overlay.style.backdropFilter = 'blur(6px)';
     overlay.style.webkitBackdropFilter = 'blur(6px)';
+    overlay.style.setProperty('z-index', '2000000', 'important');
 
     // Do not blur the entire document (this would also blur the modal)
     // rely on overlay.backdropFilter to obscure background instead
@@ -311,7 +360,7 @@ function showUnlockModal() {
     box.style.background = 'linear-gradient(180deg, rgba(6,10,20,0.95), rgba(12,18,36,0.98))';
     box.style.color = '#aaf6ff';
     box.style.position = 'relative';
-    box.style.zIndex = '65001';
+    box.style.setProperty('z-index', '2000001', 'important');
     box.style.border = '1px solid rgba(80,220,255,0.08)';
     box.style.boxShadow = '0 20px 60px rgba(0,0,0,0.6), 0 0 24px rgba(0,160,255,0.04)';
     box.style.fontFamily = "ui-monospace, SFMono-Regular, Menlo, Monaco, monospace";
@@ -547,6 +596,47 @@ async function updateExtraCards() {
                 };
                 try { if (numbers) numbers.innerText = `${formatStorage(used)} / ${formatStorage(total)}`; } catch (e) {}
                 try { if (fill) fill.style.width = pct + '%'; } catch (e) {}
+
+                // If storage is nearly full, surface a strong notification and action.
+                try {
+                  const ALERT_KEY = 'bravo_storage_alert_v1';
+                  const alertThreshold = 0.95; // 95% used
+                  const minInterval = 24 * 60 * 60 * 1000; // throttle: once per 24h
+                  const nowTs = Date.now();
+                  const usedRatio = total > 0 ? (used / total) : 0;
+                  if (usedRatio >= alertThreshold) {
+                    try { storageCard.classList.add('attention'); storageCard.style.border = '1px solid rgba(255,94,58,0.6)'; } catch (e) {}
+
+                    // add a prominent Buy button if not present
+                    try {
+                      let buyBtn = storageCard.querySelector('#buyStorageBtn');
+                      if (!buyBtn) {
+                        buyBtn = document.createElement('button');
+                        buyBtn.id = 'buyStorageBtn';
+                        buyBtn.className = 'glowBtn';
+                        buyBtn.innerText = 'Buy more storage';
+                        buyBtn.style.marginTop = '8px';
+                        buyBtn.style.background = '#ff6b6b';
+                        buyBtn.style.border = 'none';
+                        const container = storageCard.querySelector('div') || storageCard;
+                        container.appendChild(buyBtn);
+                        buyBtn.addEventListener('click', () => { try { openPurchasePage({ reason: 'storage' }); } catch (e) {} });
+                      }
+                    } catch (e) {}
+
+                    // Throttle notifications to avoid spamming the user
+                    try {
+                      const lastNotified = parseInt(localStorage.getItem(ALERT_KEY) || '0', 10) || 0;
+                      if (!lastNotified || (nowTs - lastNotified) > minInterval) {
+                        try { localStorage.setItem(ALERT_KEY, String(nowTs)); } catch (e) {}
+                        try { showNotification('Dropbox storage nearly full', `Your Dropbox storage is ${formatStorage(used)} of ${formatStorage(total)}. Please buy more storage.`, 'error'); } catch (e) {}
+                      }
+                    } catch (e) {}
+                  } else {
+                    try { storageCard.classList.remove('attention'); storageCard.style.border = ''; } catch (e) {}
+                    try { const b = storageCard.querySelector('#buyStorageBtn'); if (b && b.parentNode) b.parentNode.removeChild(b); } catch (e) {}
+                  }
+                } catch (e) {}
               } else {
                 try { if (numbers) numbers.innerText = 'Unknown'; } catch (e) {}
               }
@@ -693,9 +783,11 @@ function showNotification(title, message, type) {
   try {
     const overlay = document.createElement('div'); overlay.className = 'modalOverlay';
     // ensure notifications appear above decorative layers (SVG traces, etc.)
-    overlay.style.zIndex = '1000001';
+    overlay.style.position = 'fixed'; overlay.style.inset = '0'; overlay.style.display = 'flex'; overlay.style.alignItems = 'center'; overlay.style.justifyContent = 'center';
+    // use setProperty with important so stylesheet rules can't push this behind decorative layers
+    overlay.style.setProperty('z-index', '2000000', 'important');
     const box = document.createElement('div'); box.className = 'modalBox';
-    try { box.style.zIndex = '1000002'; box.style.position = 'relative'; } catch (e) {}
+    try { box.style.setProperty('z-index', '2000001', 'important'); box.style.position = 'relative'; } catch (e) {}
     const h = document.createElement('div'); h.style.fontWeight = '800'; h.style.marginBottom = '8px'; h.innerText = title || '';
     const p = document.createElement('div'); p.innerText = message || '';
     const actions = document.createElement('div'); actions.className = 'modalActions';
@@ -728,10 +820,10 @@ try {
 } catch (e) { console.warn('window controls wiring failed', e); }
 
 function animateSplashMessage() {
-  loadingMsg.style.opacity = '0';
+  // show animated loader text and subtle progress
+  try { loadingMsg.style.opacity = '1'; } catch (e) {}
   setTimeout(() => {
-    loadingMsg.innerText = messages[currentMsgIndex];
-    loadingMsg.style.opacity = '1';
+    try { loadingMsg.innerText = messages[currentMsgIndex] + ' ' + (".   ").slice(0, (currentMsgIndex % 3) + 1).replace(/ /g, '.'); } catch (e) {}
     currentMsgIndex = (currentMsgIndex + 1) % messages.length;
     if (currentMsgIndex === 0) {
       // All messages shown; hide splash after next cycle
@@ -894,7 +986,7 @@ function showWelcomeTour(force) {
 
     const steps = [
       { selector: '.statsRowExtra .userCard', title: 'Signed-in user', text: 'Shows the Dropbox account currently signed in. Use Manage to change connection.' },
-      { selector: '.statsRowExtra .storageCard', title: 'Dropbox storage', text: 'Shows your storage usage and shows if Drop.x ' },
+      { selector: '.statsRowExtra .storageCard', title: 'Dropbox storage', text: 'Shows your storage usage and shows if Dropbox storage space is full ' },
       { selector: '#dropboxConnectCard', title: 'Dropbox connection', text: 'Connect or manage your Dropbox connection here. Required to sync forms.' },
       { selector: '.statsRow .statCard:nth-child(1)', title: 'Total forms', text: 'Displays the number of forms stored in your Dropbox.' },
       { selector: '.statsRow .statCard:nth-child(2)', title: 'Forms saved today', text: 'Quickly access forms saved today and export them as a batch.' },
@@ -909,7 +1001,7 @@ function showWelcomeTour(force) {
     // overlay no longer paints the whole surface; use four cover panels so we can
     // leave a transparent hole directly over the focused element (so it remains clear)
     const overlay = document.createElement('div'); overlay.id = 'bravoTourOverlay';
-    overlay.style.position = 'fixed'; overlay.style.inset = '0'; overlay.style.zIndex = '120000'; overlay.style.pointerEvents = 'auto';
+    overlay.style.position = 'fixed'; overlay.style.inset = '0'; overlay.style.pointerEvents = 'auto'; overlay.style.setProperty('z-index', '2000000', 'important');
 
     const coverTop = document.createElement('div'); coverTop.id = 'bravoTourCoverTop';
     const coverLeft = document.createElement('div'); coverLeft.id = 'bravoTourCoverLeft';
@@ -919,15 +1011,15 @@ function showWelcomeTour(force) {
       c.style.position = 'absolute';
       c.style.background = 'rgba(3,6,12,0.55)';
       c.style.pointerEvents = 'auto';
-      c.style.zIndex = '120000';
+      c.style.setProperty('z-index', '2000000', 'important');
       overlay.appendChild(c);
     });
 
     const highlight = document.createElement('div'); highlight.id = 'bravoTourHighlight';
-    highlight.style.position = 'absolute'; highlight.style.border = '2px solid rgba(0,240,255,0.95)'; highlight.style.boxShadow = '0 8px 32px rgba(0,240,255,0.12), 0 0 36px rgba(0,200,255,0.1)'; highlight.style.borderRadius = '10px'; highlight.style.transition = 'all 260ms ease'; highlight.style.pointerEvents = 'none'; highlight.style.zIndex = '120001';
+    highlight.style.position = 'absolute'; highlight.style.border = '2px solid rgba(0,240,255,0.95)'; highlight.style.boxShadow = '0 8px 32px rgba(0,240,255,0.12), 0 0 36px rgba(0,200,255,0.1)'; highlight.style.borderRadius = '10px'; highlight.style.transition = 'all 260ms ease'; highlight.style.pointerEvents = 'none'; highlight.style.setProperty('z-index', '2000001', 'important');
 
     const tooltip = document.createElement('div'); tooltip.id = 'bravoTourTooltip';
-    tooltip.style.position = 'absolute'; tooltip.style.minWidth = '260px'; tooltip.style.maxWidth = '420px'; tooltip.style.background = 'linear-gradient(180deg, rgba(8,12,20,0.98), rgba(6,10,16,0.96))'; tooltip.style.color = '#c8fbff'; tooltip.style.padding = '12px'; tooltip.style.borderRadius = '8px'; tooltip.style.boxShadow = '0 12px 36px rgba(0,0,0,0.4)'; tooltip.style.fontFamily = "Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial"; tooltip.style.zIndex = '120001';
+    tooltip.style.position = 'absolute'; tooltip.style.minWidth = '260px'; tooltip.style.maxWidth = '420px'; tooltip.style.background = 'linear-gradient(180deg, rgba(8,12,20,0.98), rgba(6,10,16,0.96))'; tooltip.style.color = '#c8fbff'; tooltip.style.padding = '12px'; tooltip.style.borderRadius = '8px'; tooltip.style.boxShadow = '0 12px 36px rgba(0,0,0,0.4)'; tooltip.style.fontFamily = "Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial"; tooltip.style.setProperty('z-index', '2000001', 'important');
 
     const tTitle = document.createElement('div'); tTitle.style.fontWeight = '800'; tTitle.style.marginBottom = '6px'; tTitle.style.fontSize = '14px';
     const tText = document.createElement('div'); tText.style.fontSize = '13px'; tText.style.opacity = '0.95'; tText.style.marginBottom = '10px';
@@ -1036,6 +1128,258 @@ function showWelcomeTour(force) {
 // Show tour once on first-run (if not yet seen)
 try { if (!localStorage.getItem('bravo_seen_tour_v1')) setTimeout(showWelcomeTour, 1500); } catch (e) {}
 
+// Batch export tutorial persistence
+const BATCH_TOUR_KEY = 'bravo_batch_tour_v1';
+function _loadBatchTour() { try { const raw = localStorage.getItem(BATCH_TOUR_KEY); return raw ? JSON.parse(raw) : { acknowledged: false }; } catch (e) { return { acknowledged: false }; } }
+function _saveBatchTour(obj) { try { localStorage.setItem(BATCH_TOUR_KEY, JSON.stringify(obj || {})); } catch (e) {} }
+
+function showBatchExportTour(exportBtnEl, listWrapperEl, force) {
+  try {
+    if (!exportBtnEl || !listWrapperEl) return;
+    const state = _loadBatchTour();
+    if (!force && state && state.acknowledged) return;
+
+    // Create overlay with hole punch highlight around export button and a sample checkbox
+    const overlay = document.createElement('div'); overlay.id = 'bravoBatchTour'; overlay.style.position = 'fixed'; overlay.style.inset = '0'; overlay.style.pointerEvents = 'auto'; overlay.style.setProperty('z-index', '2000000', 'important');
+    const coverTop = document.createElement('div'); const coverLeft = document.createElement('div'); const coverRight = document.createElement('div'); const coverBottom = document.createElement('div');
+    [coverTop, coverLeft, coverRight, coverBottom].forEach(c => { c.style.position = 'absolute'; c.style.background = 'rgba(3,6,12,0.6)'; c.style.setProperty('z-index', '2000000', 'important'); overlay.appendChild(c); });
+
+    const highlight = document.createElement('div'); highlight.style.position = 'absolute'; highlight.style.border = '2px solid rgba(0,240,255,0.95)'; highlight.style.boxShadow = '0 12px 48px rgba(0,240,255,0.08)'; highlight.style.borderRadius = '8px'; highlight.style.setProperty('z-index', '2000001', 'important'); highlight.style.pointerEvents = 'none'; overlay.appendChild(highlight);
+
+    const tooltip = document.createElement('div'); tooltip.style.position = 'absolute'; tooltip.style.setProperty('z-index', '2000002', 'important'); tooltip.style.minWidth = '280px'; tooltip.style.maxWidth = '420px'; tooltip.style.background = 'linear-gradient(180deg, rgba(8,12,20,0.98), rgba(6,10,16,0.96))'; tooltip.style.color = '#c8fbff'; tooltip.style.padding = '12px'; tooltip.style.borderRadius = '8px'; tooltip.style.boxShadow = '0 12px 36px rgba(0,0,0,0.4)';
+    const tTitle = document.createElement('div'); tTitle.style.fontWeight = '800'; tTitle.style.marginBottom = '6px'; tTitle.innerText = 'Fast export — select multiple forms';
+    const tText = document.createElement('div'); tText.style.fontSize = '13px'; tText.style.marginBottom = '10px'; tText.innerText = 'You can select many forms and press "Export Selected" to export or share them all at once. It’s fast and powerful — try it!';
+    const cbWrap = document.createElement('div'); cbWrap.style.display = 'flex'; cbWrap.style.alignItems = 'center'; cbWrap.style.gap = '8px'; cbWrap.style.marginBottom = '8px';
+    const dont = document.createElement('input'); dont.type = 'checkbox'; dont.id = 'batchTourDontShow'; const lbl = document.createElement('label'); lbl.htmlFor = 'batchTourDontShow'; lbl.style.color = '#bfeeff'; lbl.innerText = "Don't show again";
+    cbWrap.appendChild(dont); cbWrap.appendChild(lbl);
+    const btnRow = document.createElement('div'); btnRow.style.display = 'flex'; btnRow.style.justifyContent = 'flex-end'; btnRow.style.gap = '8px';
+    const ok = document.createElement('button'); ok.className = 'glowBtn'; ok.innerText = 'OK'; ok.addEventListener('click', () => {
+      try { if (dont.checked) { _saveBatchTour({ acknowledged: true }); } try { document.body.removeChild(overlay); } catch (e) {} } catch (e) {}
+    });
+    btnRow.appendChild(ok);
+    tooltip.appendChild(tTitle); tooltip.appendChild(tText); tooltip.appendChild(cbWrap); tooltip.appendChild(btnRow);
+    overlay.appendChild(tooltip);
+    document.body.appendChild(overlay);
+
+    function position() {
+      try {
+        const pad = 8;
+        const eb = exportBtnEl.getBoundingClientRect();
+        // try to find a checkbox to point at
+        const chk = listWrapperEl.querySelector('input.batchExportCheckbox');
+        const cbRect = chk ? chk.getBoundingClientRect() : null;
+
+        // highlight export button by default
+        const targetRect = eb;
+        const left = Math.max(6, targetRect.left - pad);
+        const top = Math.max(6, targetRect.top - pad);
+        const holeW = targetRect.width + pad * 2;
+        const holeH = targetRect.height + pad * 2;
+        highlight.style.left = left + 'px'; highlight.style.top = top + 'px'; highlight.style.width = holeW + 'px'; highlight.style.height = holeH + 'px';
+
+        // covers
+        coverTop.style.left = '0px'; coverTop.style.top = '0px'; coverTop.style.width = '100%'; coverTop.style.height = top + 'px';
+        coverBottom.style.left = '0px'; coverBottom.style.top = (top + holeH) + 'px'; coverBottom.style.width = '100%'; coverBottom.style.height = Math.max(0, window.innerHeight - (top + holeH)) + 'px';
+        coverLeft.style.left = '0px'; coverLeft.style.top = top + 'px'; coverLeft.style.width = left + 'px'; coverLeft.style.height = holeH + 'px';
+        coverRight.style.left = (left + holeW) + 'px'; coverRight.style.top = top + 'px'; coverRight.style.width = Math.max(0, window.innerWidth - (left + holeW)) + 'px'; coverRight.style.height = holeH + 'px';
+
+        // position tooltip below export button if space, otherwise above
+        const tooltipW = Math.min(420, Math.max(280, targetRect.width));
+        let tx = targetRect.left + (targetRect.width / 2) - (tooltipW / 2);
+        tx = Math.max(12, Math.min(window.innerWidth - tooltipW - 12, tx));
+        let ty = targetRect.bottom + 12;
+        if (ty + 120 > window.innerHeight) ty = targetRect.top - 12 - tooltip.offsetHeight; if (ty < 12) ty = 12;
+        tooltip.style.width = tooltipW + 'px'; tooltip.style.left = tx + 'px'; tooltip.style.top = ty + 'px';
+      } catch (e) { console.warn('batch tour position failed', e); }
+    }
+
+    window.addEventListener('resize', position); setTimeout(position, 120);
+  } catch (e) { console.warn('showBatchExportTour failed', e); }
+}
+
+// Agreement storage key: records whether the user has acknowledged the premium-features message
+const AGREEMENT_KEY = 'bravo_agreement_v1';
+
+function _loadAgreement() {
+  try { const raw = localStorage.getItem(AGREEMENT_KEY); return raw ? JSON.parse(raw) : { accepted: false, lastReminded: null }; } catch (e) { return { accepted: false, lastReminded: null }; }
+}
+function _saveAgreement(obj) { try { localStorage.setItem(AGREEMENT_KEY, JSON.stringify(obj || {})); } catch (e) {} }
+
+function showAgreementModal(force) {
+  try {
+    const a = _loadAgreement();
+    if (!force && a && a.accepted) return;
+    // Avoid duplicate overlays
+    if (document.getElementById('bravoAgreementOverlay')) return;
+    const overlay = document.createElement('div'); overlay.id = 'bravoAgreementOverlay'; overlay.className = 'modalOverlay';
+    overlay.style.position = 'fixed'; overlay.style.inset = '0'; overlay.style.display = 'flex'; overlay.style.alignItems = 'center'; overlay.style.justifyContent = 'center';
+    overlay.style.background = 'rgba(0,0,0,0.7)'; overlay.style.setProperty('z-index', '2000000', 'important');
+    const box = document.createElement('div'); box.className = 'modalBox'; box.style.minWidth = '480px'; box.style.maxWidth = '92%'; box.style.padding = '20px'; box.style.background = '#02101a'; box.style.color = '#e6fbff'; box.style.borderRadius = '12px'; box.style.setProperty('z-index', '2000001', 'important');
+    const h = document.createElement('div'); h.style.fontWeight = '900'; h.style.marginBottom = '12px'; h.style.fontSize = '20px'; h.innerText = 'Optional Premium features — 7-day trial active';
+    const p = document.createElement('div'); p.style.marginBottom = '12px'; p.style.lineHeight = '1.45'; p.style.color = '#dffbff'; p.style.fontSize = '15px';
+    p.innerText = 'We have improved this app with new powerful features thats go beyond your requirements you did not request these features they are all our ideas to make your work easy if you like them you will let us know , these features will stop working afer some time and you need to buy them to continue enjoying ,Your trial lasts 7 days — after that premium features will stop working unless you activate the app with a product key, but dont worry you will still be able to see forms and export/share them .';
+    const hint = document.createElement('div'); hint.style.marginBottom = '12px'; hint.style.color = '#bfeeff'; hint.style.fontSize = '14px'; hint.innerText = 'You will be reminded daily while your trial is active.';
+    const actions = document.createElement('div'); actions.style.display = 'flex'; actions.style.justifyContent = 'flex-end'; actions.style.gap = '8px';
+    const buy = document.createElement('button'); buy.className = 'glowBtn'; buy.innerText = 'Buy features'; buy.style.background = '#ef4444'; buy.style.color = '#fff';
+    const accept = document.createElement('button'); accept.className = 'glowBtn'; accept.disabled = true; accept.innerText = 'Close (10s)';
+
+    const featList = document.createElement('div'); featList.style.display = 'flex'; featList.style.flexDirection = 'column'; featList.style.gap = '6px'; featList.style.marginBottom = '8px';
+    const premiumFeatures = ['Fast export-> Exporting and sharing many forms at once', 'Directly Opening and seeing all forms saved Today (new forms) ', 'See your Dropbox storage space & get notified when space is full', 'see the connected or Signed-in user account', 'See The Total forms in dropbox ', 'App Lock — protect the app +your forms with a password'];
+    premiumFeatures.forEach(f => {
+      try {
+        const row = document.createElement('div'); row.style.display = 'flex'; row.style.alignItems = 'center'; row.style.gap = '10px';
+        const t = document.createElement('div'); t.innerText = f; t.style.fontWeight = '700'; t.style.fontSize = '14px'; t.style.color = '#e6fbff';
+        row.appendChild(t);
+        const b = createPremiumBadge(); if (b) row.appendChild(b);
+        featList.appendChild(row);
+      } catch (e) {}
+    });
+
+    actions.appendChild(buy); actions.appendChild(accept);
+    box.appendChild(h); box.appendChild(p); box.appendChild(featList); box.appendChild(hint); box.appendChild(actions); overlay.appendChild(box); document.body.appendChild(overlay);
+
+    function teardown() { try { const el = document.getElementById('bravoAgreementOverlay'); if (el && el.parentNode) el.parentNode.removeChild(el); try { if (accept && accept._countdownTimer) { clearInterval(accept._countdownTimer); accept._countdownTimer = null; } } catch (e) {} } catch (e) {} }
+
+    // Wire buy button to open the hosted purchase page
+    try {
+      const buyUrl = (typeof window !== 'undefined' && window.__PURCHASE_URL) ? window.__PURCHASE_URL : (PURCHASE_URL || 'https://example.com/buy');
+      buy.addEventListener('click', () => { try { openPurchasePage({ reason: 'agreement' }); } catch (e) {} });
+    } catch (e) {}
+
+    // Start a 10s countdown that forces the user to read the modal
+    try {
+      let countdown = 15;
+      accept._countdownTimer = setInterval(() => {
+        try {
+          countdown -= 1;
+          if (countdown > 0) {
+            accept.innerText = `Close (${countdown}s)`;
+          } else {
+            clearInterval(accept._countdownTimer);
+            accept._countdownTimer = null;
+            accept.disabled = false;
+            accept.innerText = 'Close';
+          }
+        } catch (e) {}
+      }, 1000);
+    } catch (e) {}
+
+    accept.addEventListener('click', () => { try { a.lastReminded = (new Date()).toISOString(); _saveAgreement(a); teardown(); } catch (e) {} });
+  } catch (e) { console.warn('showAgreementModal failed', e); }
+}
+
+function checkAgreementOnStartup() {
+  try {
+    const a = _loadAgreement();
+    if (a && a.accepted) return;
+    // show on first-run quickly so users see it
+    try {
+      const lic = _loadLicense();
+      if (!lic || lic.productKey) return; // already activated
+      const start = lic && lic.trialStart ? new Date(lic.trialStart) : null;
+      if (!start) return;
+      const now = new Date();
+      const expiry = new Date(start.getTime() + (TRIAL_DAYS * 24 * 60 * 60 * 1000));
+      const daysLeft = Math.ceil((expiry - now) / (24 * 60 * 60 * 1000));
+      // Show immediately if never reminded, otherwise show if within trial period
+      if (!a.lastReminded) {
+        setTimeout(() => showAgreementModal(false), 1800);
+      } else if (now < expiry) {
+        // schedule daily reminders while trial is active
+        // show now only if last reminded > 24h ago
+        try {
+          const last = a.lastReminded ? new Date(a.lastReminded) : null;
+          if (!last || (now.getTime() - last.getTime()) > 24 * 60 * 60 * 1000) setTimeout(() => showAgreementModal(false), 900);
+        } catch (e) {}
+        // ensure an interval exists to remind daily until accepted or trial expires
+        try {
+          if (!window._agreementReminderTimer) {
+            window._agreementReminderTimer = setInterval(() => {
+              try {
+                const st = _loadLicense();
+                if (!st || st.productKey) { clearInterval(window._agreementReminderTimer); window._agreementReminderTimer = null; return; }
+                const s = st && st.trialStart ? new Date(st.trialStart) : null;
+                if (!s) { clearInterval(window._agreementReminderTimer); window._agreementReminderTimer = null; return; }
+                const now2 = new Date();
+                const expiry2 = new Date(s.getTime() + (TRIAL_DAYS * 24 * 60 * 60 * 1000));
+                if (now2 >= expiry2) { clearInterval(window._agreementReminderTimer); window._agreementReminderTimer = null; return; }
+                try { showAgreementModal(true); } catch (e) {}
+              } catch (e) {}
+            }, 24 * 60 * 60 * 1000);
+          }
+        } catch (e) {}
+      }
+    } catch (e) {}
+  } catch (e) { console.warn('checkAgreementOnStartup failed', e); }
+}
+
+// run agreement check after startup
+try { setTimeout(checkAgreementOnStartup, 2000); } catch (e) {}
+
+// --- Internet connectivity helpers
+async function isOnline(checkUrl) {
+  try {
+    // quick navigator hint first
+    if (typeof navigator !== 'undefined' && typeof navigator.onLine !== 'undefined' && !navigator.onLine) return false;
+    // attempt a fast lightweight fetch to detect captive portals / real connectivity
+    const url = checkUrl || (KEYS_JSON_URL || 'https://clients3.google.com/generate_204');
+    const controller = new AbortController();
+    const t = setTimeout(() => controller.abort(), 4000);
+    const res = await fetch(url, { method: 'HEAD', cache: 'no-store', signal: controller.signal }).catch(() => null);
+    clearTimeout(t);
+    if (!res) return false;
+    // status 0 is possible in some environments; treat 200-399 as online
+    return (res.status >= 200 && res.status < 400) || res.type === 'opaque' || res.status === 0;
+  } catch (e) { return false; }
+}
+
+function showInternetRequiredModal() {
+  try {
+    if (document.getElementById('bravoNoInternetOverlay')) return;
+    const overlay = document.createElement('div'); overlay.id = 'bravoNoInternetOverlay'; overlay.className = 'modalOverlay';
+    overlay.style.position = 'fixed'; overlay.style.inset = '0'; overlay.style.display = 'flex'; overlay.style.alignItems = 'center'; overlay.style.justifyContent = 'center';
+    overlay.style.background = 'rgba(2,6,23,0.94)'; overlay.style.setProperty('z-index', '2000000', 'important');
+    const box = document.createElement('div'); box.className = 'modalBox'; box.style.minWidth = '360px'; box.style.maxWidth = '92%'; box.style.padding = '18px'; box.style.borderRadius = '12px'; box.style.background = 'linear-gradient(180deg, rgba(8,12,16,0.98), rgba(6,10,12,0.98))'; box.style.color = '#dffbff'; box.style.setProperty('z-index', '2000001', 'important');
+    const h = document.createElement('div'); h.style.fontWeight = '800'; h.style.fontSize = '16px'; h.style.marginBottom = '8px'; h.innerText = 'No internet connection';
+    const p = document.createElement('div'); p.style.marginBottom = '12px'; p.style.lineHeight = '1.4'; p.style.color = '#bfeeff'; p.innerText = "This app requires an active internet connection to validate product keys and enable online features. Please connect to the internet and retry.";
+    const actions = document.createElement('div'); actions.style.display = 'flex'; actions.style.justifyContent = 'flex-end'; actions.style.gap = '8px';
+    const retry = document.createElement('button'); retry.className = 'glowBtn'; retry.innerText = 'Retry'; retry.style.padding = '8px 12px';
+    const close = document.createElement('button'); close.innerText = 'Close'; close.style.border = '1px solid rgba(255,255,255,0.06)'; close.style.background = 'transparent'; close.style.color = '#bfeeff'; close.style.padding = '8px 12px'; close.style.borderRadius = '6px';
+    actions.appendChild(close); actions.appendChild(retry);
+    box.appendChild(h); box.appendChild(p); box.appendChild(actions); overlay.appendChild(box); document.body.appendChild(overlay);
+
+    // Retry will attempt a quick online check and remove the modal if successful
+    retry.addEventListener('click', async () => {
+      try {
+        try { showSpinner('Checking internet...'); } catch (e) {}
+        const ok = await isOnline();
+        try { hideSpinner(); } catch (e) {}
+        if (ok) {
+          try { if (overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay); } catch (e) {}
+          showNotification('Connected', 'Internet connection detected', 'success');
+        } else {
+          showNotification('Still offline', 'No internet connection detected', 'error');
+        }
+      } catch (e) { try { hideSpinner(); } catch (ex) {} }
+    });
+
+    // Close simply leaves the modal visible but non-destructive; keep it removable
+    close.addEventListener('click', () => { try { if (overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay); } catch (e) {} });
+  } catch (e) { console.warn('showInternetRequiredModal failed', e); }
+}
+
+function hideInternetRequiredModal() {
+  try { const el = document.getElementById('bravoNoInternetOverlay'); if (el && el.parentNode) el.parentNode.removeChild(el); } catch (e) {}
+}
+
+// Listen for network changes to show/hide the offline modal
+try {
+  window.addEventListener && window.addEventListener('offline', () => { try { showInternetRequiredModal(); } catch (e) {} });
+  window.addEventListener && window.addEventListener('online', () => { try { hideInternetRequiredModal(); showNotification('Connected', 'Internet connection restored', 'success'); } catch (e) {} });
+  // initial check shortly after startup
+  setTimeout(async () => { try { const ok = await isOnline(); if (!ok) showInternetRequiredModal(); } catch (e) {} }, 1200);
+} catch (e) { console.warn('network listeners failed', e); }
+
 // Add a small Help button next to the Refresh control to start the tour on demand
 try {
   const mountHelpBtn = () => {
@@ -1103,9 +1447,11 @@ function setConnectLoading(on, msg) {
 
 // simple CSS for spinner animation injected once
 try {
-  if (!document.getElementById('inlineSpinnerStyles')) {
+    if (!document.getElementById('inlineSpinnerStyles')) {
     const st = document.createElement('style'); st.id = 'inlineSpinnerStyles';
-    st.innerHTML = '@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}} .inlineSpinner svg{color:rgba(148,163,184,0.9)}';
+    st.innerHTML = '@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}} .inlineSpinner svg{color:rgba(148,163,184,0.9)}\n' +
+      '.pulseExportBtn { animation: pulse 1200ms infinite; transform-origin: center; }\n' +
+      '@keyframes pulse { 0% { transform: scale(1); box-shadow: 0 0 0 rgba(0,240,255,0);} 50% { transform: scale(1.06); box-shadow: 0 8px 30px rgba(0,200,255,0.35);} 100% { transform: scale(1); box-shadow: 0 0 0 rgba(0,240,255,0);} }';
     document.head && document.head.appendChild(st);
   }
 } catch (e) {}
@@ -1624,18 +1970,19 @@ function renderStatsCards(entries) {
           // After insertion, measure and position absolutely centered above the display
           requestAnimationFrame(() => {
             try {
-              extraRow.style.position = 'absolute';
+              // Use relative positioning so the row flows with layout and will reflow
+              // correctly when the display or data changes (prevents stuck cards).
+              extraRow.style.position = 'relative';
               extraRow.style.left = '50%';
               extraRow.style.transform = 'translateX(-50%)';
               extraRow.style.zIndex = '12000';
               extraRow.style.pointerEvents = 'auto';
-              // place it slightly overlapping the top of displayEl
+              // place it slightly overlapping the top of displayEl using margin
               const hostRect = host.getBoundingClientRect();
               const dispRect = displayEl.getBoundingClientRect();
               const extraH = extraRow.offsetHeight || 72;
-              // target top relative to host: a little above display top
               const top = Math.max(8, (dispRect.top - hostRect.top) - (extraH / 2));
-              extraRow.style.top = top + 'px';
+              extraRow.style.marginTop = top + 'px';
             } catch (e) { /* ignore positioning errors */ }
           });
         }
@@ -1950,7 +2297,12 @@ async function openEntryModal(entry) {
     overlay.style.position = 'fixed';
     overlay.style.inset = '0';
     overlay.style.background = 'rgba(0,0,0,0.45)';
-    overlay.style.zIndex = (entry && entry._overlayZ) ? String(entry._overlayZ) : '22000';
+    // ensure overlay appears above decorative layers and above any requested base overlay
+    try {
+      const base = entry && entry._overlayZ ? Number(entry._overlayZ) || 0 : 0;
+      const ovZ = Math.max(2000000, base + 1);
+      overlay.style.setProperty('z-index', String(ovZ), 'important');
+    } catch (e) { overlay.style.setProperty('z-index', '2000000', 'important'); }
     overlay.style.display = 'flex';
     overlay.style.alignItems = 'center';
     overlay.style.justifyContent = 'center';
@@ -1964,6 +2316,7 @@ async function openEntryModal(entry) {
     modal.style.maxHeight = '90vh';
     modal.style.overflow = 'hidden';
     modal.style.display = 'flex';
+    try { modal.style.setProperty('z-index', String((overlay.style && overlay.style.zIndex) ? (Number(overlay.style.zIndex) + 1) : 2000001), 'important'); } catch (e) { modal.style.setProperty('z-index', '2000001', 'important'); }
     modal.style.flexDirection = 'column';
     modal.style.boxShadow = '0 12px 40px rgba(0,0,0,0.25)';
 
@@ -2113,12 +2466,12 @@ async function openEntryModal(entry) {
               // ensure overlay is full-screen and above everything (use important)
               overlay.style.position = 'fixed'; overlay.style.inset = '0'; overlay.style.background = 'rgba(0,0,0,0.35)';
               overlay.style.display = 'flex'; overlay.style.alignItems = 'center'; overlay.style.justifyContent = 'center';
-              overlay.style.setProperty('z-index', '61000', 'important');
+              overlay.style.setProperty('z-index', '2000000', 'important');
 
               const box = document.createElement('div'); box.className = 'modalBox';
               box.style.position = 'relative'; box.style.minWidth = '320px'; box.style.maxWidth = '80%'; box.style.background = '#fff';
               box.style.padding = '14px'; box.style.borderRadius = '10px'; box.style.boxShadow = '0 12px 40px rgba(0,0,0,0.25)';
-              box.style.setProperty('z-index', '61001', 'important');
+              box.style.setProperty('z-index', '2000001', 'important');
 
               const h = document.createElement('div'); h.style.fontWeight = '800'; h.style.marginBottom = '8px'; h.innerText = 'Export saved';
               const p = document.createElement('div'); p.innerText = 'Saved to Documents'; p.title = res.pdfPath || '';
@@ -2649,7 +3002,7 @@ function showBatchYearPicker(entries) {
       } catch (e) {}
     });
     const years = Object.keys(yearMap).sort((a,b) => Number(b) - Number(a));
-    const overlay = document.createElement('div'); overlay.className = 'modalOverlay'; overlay.style.zIndex = 32000;
+    const overlay = document.createElement('div'); overlay.className = 'modalOverlay'; overlay.style.position = 'fixed'; overlay.style.inset = '0'; overlay.style.display = 'flex'; overlay.style.alignItems = 'center'; overlay.style.justifyContent = 'center'; overlay.style.background = 'rgba(0,0,0,0.35)'; overlay.style.setProperty('z-index', '2000000', 'important');
     const box = document.createElement('div'); box.className = 'modalBox'; box.style.minWidth = '360px'; box.style.maxWidth = '80%'; box.style.padding = '12px';
     const h = document.createElement('div'); h.style.fontWeight = '800'; h.style.marginBottom = '8px'; h.innerText = 'Batch export — choose a year';
     const list = document.createElement('div'); list.style.display = 'flex'; list.style.flexWrap = 'wrap'; list.style.gap = '8px';
@@ -2681,8 +3034,8 @@ function showYearFormsModal(year) {
       try { const d = e.server_modified ? new Date(e.server_modified) : null; return d && String(d.getFullYear()) === String(year); } catch (e) { return false; }
     }).sort((a,b) => new Date(b.server_modified) - new Date(a.server_modified));
 
-    const overlay = document.createElement('div'); overlay.className = 'modalOverlay'; overlay.style.zIndex = 30000;
-    const box = document.createElement('div'); box.className = 'modalBox'; box.style.maxHeight = '80vh'; box.style.overflow = 'auto'; box.style.width = '920px'; box.style.position = 'relative';
+    const overlay = document.createElement('div'); overlay.className = 'modalOverlay'; overlay.style.position = 'fixed'; overlay.style.inset = '0'; overlay.style.display = 'flex'; overlay.style.alignItems = 'flex-start'; overlay.style.justifyContent = 'center'; overlay.style.background = 'rgba(0,0,0,0.3)'; overlay.style.setProperty('z-index', '2000000', 'important');
+    const box = document.createElement('div'); box.className = 'modalBox'; box.style.maxHeight = '80vh'; box.style.overflow = 'auto'; box.style.width = '920px'; box.style.position = 'relative'; box.style.setProperty('z-index', '2000001', 'important');
     const h = document.createElement('div'); h.style.fontWeight = '800'; h.style.marginBottom = '8px'; h.innerText = `Dropbox forms — ${year}`;
 
     // Filter controls (top of modal): Today, Last N days, date range, clear
@@ -2818,6 +3171,26 @@ function showYearFormsModal(year) {
           const infoBtn = document.createElement('button'); infoBtn.innerText = 'Info'; infoBtn.title = 'Preview or select this file for batch export'; infoBtn.addEventListener('click', () => { try { showNotification('File', ent.name || getFriendlyTitle(ent), ''); } catch (e) {} });
           actions.appendChild(infoBtn);
           row.appendChild(left); row.appendChild(actions);
+          // clicking the row body (not buttons/inputs) toggles selection for files
+          try {
+            row.addEventListener('click', (ev) => {
+              try {
+                const t = ev.target || ev.srcElement;
+                // ignore clicks on interactive controls
+                if (!t) return;
+                if (t.tagName === 'BUTTON' || t.tagName === 'INPUT' || (t.closest && t.closest('button')) || (t.closest && t.closest('input'))) return;
+                if (isFile && chk) {
+                  chk.checked = !chk.checked;
+                  chk.dispatchEvent(new Event('change', { bubbles: true }));
+                  // animate export button when selections exist
+                  try {
+                    const any = Array.from(listWrapper.querySelectorAll('input.batchExportCheckbox')).some(i => i.checked);
+                    if (any) exportBtn.classList.add('pulseExportBtn'); else exportBtn.classList.remove('pulseExportBtn');
+                  } catch (e) {}
+                }
+              } catch (e) {}
+            });
+          } catch (e) {}
           listWrapper.appendChild(row);
         });
       });
@@ -2959,52 +3332,13 @@ function showYearFormsModal(year) {
           return;
         }
         try {
-          // Ensure the global spinner is hidden so the debug summary is visible immediately
           try { hideSpinner(); } catch (e) {}
-          // Show a short on-screen debug summary before calling the export IPC.
-          const debugOverlay = document.createElement('div'); debugOverlay.className = 'modalOverlay'; debugOverlay.style.position = 'fixed'; debugOverlay.style.inset = '0'; debugOverlay.style.background = 'rgba(0,0,0,0.45)'; debugOverlay.style.display = 'flex'; debugOverlay.style.alignItems = 'center'; debugOverlay.style.justifyContent = 'center'; debugOverlay.style.setProperty('z-index', '65000', 'important');
-          const debugBox = document.createElement('div'); debugBox.className = 'modalBox'; debugBox.style.minWidth = '420px'; debugBox.style.maxWidth = '90%'; debugBox.style.maxHeight = '80vh'; debugBox.style.overflow = 'auto'; debugBox.style.padding = '12px'; debugBox.style.background = '#fff'; debugBox.style.borderRadius = '10px'; debugBox.style.boxShadow = '0 12px 40px rgba(0,0,0,0.25)';
-          debugBox.style.setProperty('z-index','65001','important');
-          const dh = document.createElement('div'); dh.style.fontWeight = '800'; dh.style.marginBottom = '8px'; dh.innerText = 'Batch export — debug summary';
-          const info = document.createElement('div'); info.style.color = '#475569'; info.style.fontSize = '13px'; info.style.marginBottom = '8px';
-          info.innerText = `Prepared ${wrappers.length} form${wrappers.length!==1?'s':''}. Failed downloads: ${failed.length}`;
-          const list = document.createElement('div'); list.style.maxHeight = '40vh'; list.style.overflow = 'auto'; list.style.padding = '8px 0';
-          wrappers.forEach((w, idx) => {
-            const line = document.createElement('div'); line.style.marginBottom = '6px'; line.style.fontSize = '13px';
-            const name = (w && w.meta && w.meta.name) ? w.meta.name : (w && w.payload && (w.payload.title || w.payload.name)) || `form_${idx+1}`;
-            const fp = (w && w.meta && w.meta.filePath) ? w.meta.filePath : '(no path)';
-            line.innerText = `${idx+1}. ${name} — ${fp}`;
-            list.appendChild(line);
-          });
-          if (failed && failed.length) {
-            const fhead = document.createElement('div'); fhead.style.marginTop = '8px'; fhead.style.fontWeight = '700'; fhead.innerText = 'Failed items:'; list.appendChild(fhead);
-            failed.forEach(f => { const li = document.createElement('div'); li.style.fontSize = '13px'; li.style.color = '#b91c1c'; li.innerText = `${f.name} — ${f.reason || ''}`; list.appendChild(li); });
-          }
-          const actions = document.createElement('div'); actions.style.display = 'flex'; actions.style.justifyContent = 'flex-end'; actions.style.gap = '8px'; actions.style.marginTop = '12px';
-          const cancelBtn = document.createElement('button'); cancelBtn.innerText = 'Cancel'; cancelBtn.style.padding = '8px 12px'; cancelBtn.style.border = '1px solid #e2e8f0'; cancelBtn.style.borderRadius = '8px';
-          const proceedBtn = document.createElement('button'); proceedBtn.innerText = 'Proceed'; proceedBtn.className = 'glowBtn'; proceedBtn.style.padding = '8px 12px'; proceedBtn.style.borderRadius = '8px';
-          actions.appendChild(cancelBtn); actions.appendChild(proceedBtn);
-          debugBox.appendChild(dh); debugBox.appendChild(info); debugBox.appendChild(list); debugBox.appendChild(actions); debugOverlay.appendChild(debugBox); document.body.appendChild(debugOverlay);
-
-          const userChoice = await new Promise((resolve) => {
-            cancelBtn.addEventListener('click', () => resolve('cancel'));
-            proceedBtn.addEventListener('click', () => resolve('proceed'));
-          });
-          // If user cancelled, cleanup temp files and abort
-          if (userChoice !== 'proceed') {
-            try { for (const p of tempPaths) await window.electronAPI.drive.deleteLocalForm(p).catch(() => null); } catch (e) {}
-            try { document.body.removeChild(debugOverlay); } catch (e) {}
-            try { hideSpinner(); } catch (e) {}
-            exportBtn.disabled = false; exportBtn.innerText = `Export Selected (0)`; selectedSet.clear(); Array.from(listWrapper.querySelectorAll('input.batchExportCheckbox')).forEach(i => i.checked = false);
-            return;
-          }
-          // proceed: remove overlay and call export IPC
-          try { document.body.removeChild(debugOverlay); } catch (e) {}
+          // Proceed immediately with batch export (no debug summary)
           const res = await window.electronAPI.exportFormsPdf(wrappers, { year: year, baseName: 'forms', saveToDocuments: true, max: MAX_BATCH });
           if (res && res.ok) {
             try {
               const overlay = document.createElement('div'); overlay.className = 'modalOverlay'; overlay.style.position = 'fixed'; overlay.style.inset = '0'; overlay.style.background = 'rgba(0,0,0,0.35)'; overlay.style.display = 'flex'; overlay.style.alignItems = 'center'; overlay.style.justifyContent = 'center'; overlay.style.setProperty('z-index', '61000', 'important');
-              const box = document.createElement('div'); box.className = 'modalBox'; box.style.position = 'relative'; box.style.minWidth = '320px'; box.style.maxWidth = '80%'; box.style.background = '#fff'; box.style.padding = '14px'; box.style.borderRadius = '10px'; box.style.boxShadow = '0 12px 40px rgba(0,0,0,0.25)'; box.style.setProperty('z-index', '61001', 'important');
+              const box = document.createElement('div'); box.className = 'modalBox'; box.style.position = 'relative'; box.style.minWidth = '320px'; box.style.maxWidth = '80%'; box.style.background = '#fff'; box.style.padding = '14px'; box.style.borderRadius = '10px'; box.style.boxShadow = '0 12px 40px rgba(0,0,0,0.25)'; box.style.setProperty('z-index', '2000001', 'important');
               const h = document.createElement('div'); h.style.fontWeight = '800'; h.style.marginBottom = '8px'; h.innerText = 'Export saved';
               const p = document.createElement('div'); p.innerText = 'Saved to Documents'; p.title = res.pdfPath || '';
               const actions2 = document.createElement('div'); actions2.className = 'modalActions'; actions2.style.display = 'flex'; actions2.style.gap = '8px'; actions2.style.marginTop = '12px';
@@ -3021,11 +3355,13 @@ function showYearFormsModal(year) {
         } catch (e) { showNotification('Export failed', String(e), 'error'); }
         try { hideSpinner(); } catch (e) {}
       } catch (e) { console.warn('batch export failed', e); showNotification('Export failed', String(e), 'error'); }
-      finally { exportBtn.disabled = false; exportBtn.innerText = `Export Selected (0)`; selectedSet.clear(); Array.from(listWrapper.querySelectorAll('input.batchExportCheckbox')).forEach(i => i.checked = false); }
+      finally { exportBtn.disabled = false; exportBtn.innerText = `Export Selected (0)`; selectedSet.clear(); Array.from(listWrapper.querySelectorAll('input.batchExportCheckbox')).forEach(i => i.checked = false); try { exportBtn.classList.remove('pulseExportBtn'); } catch (e) {} }
     });
     // initial render
     box.appendChild(h); box.appendChild(controls); box.appendChild(listWrapper);
     renderGrouped(entries);
+    // show batch export tutorial each time the year modal is opened unless acknowledged
+    try { setTimeout(() => { try { showBatchExportTour(exportBtn, listWrapper, false); } catch (e) {} }, 300); } catch (e) {}
 
     const close = document.createElement('button'); close.innerText = 'Close';
     try {
@@ -3090,28 +3426,12 @@ function showYearFormsModal(year) {
         return;
       }
       try { hideSpinner(); } catch (e) {}
-      // debug overlay
-      const debugOverlay = document.createElement('div'); debugOverlay.className = 'modalOverlay'; debugOverlay.style.position = 'fixed'; debugOverlay.style.inset = '0'; debugOverlay.style.background = 'rgba(0,0,0,0.45)'; debugOverlay.style.display = 'flex'; debugOverlay.style.alignItems = 'center'; debugOverlay.style.justifyContent = 'center'; debugOverlay.style.setProperty('z-index', '65000', 'important');
-      const debugBox = document.createElement('div'); debugBox.className = 'modalBox'; debugBox.style.minWidth = '420px'; debugBox.style.maxWidth = '90%'; debugBox.style.maxHeight = '80vh'; debugBox.style.overflow = 'auto'; debugBox.style.padding = '12px'; debugBox.style.background = '#fff'; debugBox.style.borderRadius = '10px'; debugBox.style.boxShadow = '0 12px 40px rgba(0,0,0,0.25)'; debugBox.style.setProperty('z-index','65001','important');
-      const dh = document.createElement('div'); dh.style.fontWeight = '800'; dh.style.marginBottom = '8px'; dh.innerText = 'Batch export — debug summary';
-      const info = document.createElement('div'); info.style.color = '#475569'; info.style.fontSize = '13px'; info.style.marginBottom = '8px';
-      info.innerText = `Prepared ${wrappers.length} form${wrappers.length!==1?'s':''}. Failed downloads: ${failed.length}`;
-      const list = document.createElement('div'); list.style.maxHeight = '40vh'; list.style.overflow = 'auto'; list.style.padding = '8px 0';
-      wrappers.forEach((w, idx) => { const line = document.createElement('div'); line.style.marginBottom = '6px'; line.style.fontSize = '13px'; const name = (w && w.meta && w.meta.name) ? w.meta.name : (w && w.payload && (w.payload.title || w.payload.name)) || `form_${idx+1}`; const fp = (w && w.meta && w.meta.filePath) ? w.meta.filePath : '(no path)'; line.innerText = `${idx+1}. ${name} — ${fp}`; list.appendChild(line); });
-      if (failed && failed.length) { const fhead = document.createElement('div'); fhead.style.marginTop = '8px'; fhead.style.fontWeight = '700'; fhead.innerText = 'Failed items:'; list.appendChild(fhead); failed.forEach(f => { const li = document.createElement('div'); li.style.fontSize = '13px'; li.style.color = '#b91c1c'; li.innerText = `${f.name} — ${f.reason || ''}`; list.appendChild(li); }); }
-      const actions = document.createElement('div'); actions.style.display = 'flex'; actions.style.justifyContent = 'flex-end'; actions.style.gap = '8px'; actions.style.marginTop = '12px';
-      const cancelBtn = document.createElement('button'); cancelBtn.innerText = 'Cancel'; cancelBtn.style.padding = '8px 12px'; cancelBtn.style.border = '1px solid #e2e8f0'; cancelBtn.style.borderRadius = '8px';
-      const proceedBtn = document.createElement('button'); proceedBtn.innerText = 'Proceed'; proceedBtn.className = 'glowBtn'; proceedBtn.style.padding = '8px 12px'; proceedBtn.style.borderRadius = '8px';
-      actions.appendChild(cancelBtn); actions.appendChild(proceedBtn);
-      debugBox.appendChild(dh); debugBox.appendChild(info); debugBox.appendChild(list); debugBox.appendChild(actions); debugOverlay.appendChild(debugBox); document.body.appendChild(debugOverlay);
-      const userChoice = await new Promise((resolve) => { cancelBtn.addEventListener('click', () => resolve('cancel')); proceedBtn.addEventListener('click', () => resolve('proceed')); });
-      if (userChoice !== 'proceed') { try { for (const p of tempPaths) await window.electronAPI.drive.deleteLocalForm(p).catch(() => null); } catch (e) {} try { document.body.removeChild(debugOverlay); } catch (e) {} try { hideSpinner(); } catch (e) {} exportBtn.disabled = false; exportBtn.innerText = `Export Selected (0)`; selectedSet.clear(); Array.from(listWrapper.querySelectorAll('input.batchExportCheckbox')).forEach(i => i.checked = false); return; }
-      try { document.body.removeChild(debugOverlay); } catch (e) {}
+      // Proceed immediately with batch export (removed debug summary modal)
       const res = await window.electronAPI.exportFormsPdf(wrappers, { year: year, baseName: baseName || 'forms', saveToDocuments: true, max: max || 5 });
       if (res && res.ok) {
         try {
           const overlay = document.createElement('div'); overlay.className = 'modalOverlay'; overlay.style.position = 'fixed'; overlay.style.inset = '0'; overlay.style.background = 'rgba(0,0,0,0.35)'; overlay.style.display = 'flex'; overlay.style.alignItems = 'center'; overlay.style.justifyContent = 'center'; overlay.style.setProperty('z-index', '61000', 'important');
-          const box = document.createElement('div'); box.className = 'modalBox'; box.style.position = 'relative'; box.style.minWidth = '320px'; box.style.maxWidth = '80%'; box.style.background = '#fff'; box.style.padding = '14px'; box.style.borderRadius = '10px'; box.style.boxShadow = '0 12px 40px rgba(0,0,0,0.25)'; box.style.setProperty('z-index', '61001', 'important');
+          const box = document.createElement('div'); box.className = 'modalBox'; box.style.position = 'relative'; box.style.minWidth = '320px'; box.style.maxWidth = '80%'; box.style.background = '#fff'; box.style.padding = '14px'; box.style.borderRadius = '10px'; box.style.boxShadow = '0 12px 40px rgba(0,0,0,0.25)'; box.style.setProperty('z-index', '2000001', 'important');
           const h = document.createElement('div'); h.style.fontWeight = '800'; h.style.marginBottom = '8px'; h.innerText = 'Export saved';
           const p = document.createElement('div'); p.innerText = 'Saved to Documents'; p.title = res.pdfPath || '';
           const actions2 = document.createElement('div'); actions2.className = 'modalActions'; actions2.style.display = 'flex'; actions2.style.gap = '8px'; actions2.style.marginTop = '12px';
@@ -3126,7 +3446,7 @@ function showYearFormsModal(year) {
       }
       try { hideSpinner(); } catch (e) {}
     } catch (e) { console.warn('exportSelectedFromList failed', e); showNotification('Export failed', String(e), 'error'); }
-    finally { try { exportBtn.disabled = false; exportBtn.innerText = `Export Selected (0)`; selectedSet.clear(); Array.from(listWrapper.querySelectorAll('input.batchExportCheckbox')).forEach(i => i.checked = false); } catch (e) {} }
+    finally { try { exportBtn.disabled = false; exportBtn.innerText = `Export Selected (0)`; selectedSet.clear(); Array.from(listWrapper.querySelectorAll('input.batchExportCheckbox')).forEach(i => i.checked = false); try { exportBtn.classList.remove('pulseExportBtn'); } catch (e) {} } catch (e) {} }
   }
 }
 
@@ -3142,11 +3462,20 @@ function showTodayFormsModal() {
       } catch (e) { return false; }
     }).sort((a,b) => new Date(b.server_modified) - new Date(a.server_modified));
 
-    const overlay = document.createElement('div'); overlay.className = 'modalOverlay'; overlay.style.zIndex = 30500;
-    const box = document.createElement('div'); box.className = 'modalBox'; box.style.maxHeight = '80vh'; box.style.overflow = 'auto'; box.style.width = '920px'; box.style.position = 'relative';
+    const overlay = document.createElement('div'); overlay.className = 'modalOverlay'; overlay.style.position = 'fixed'; overlay.style.inset = '0'; overlay.style.display = 'flex'; overlay.style.alignItems = 'center'; overlay.style.justifyContent = 'center'; overlay.style.background = 'rgba(0,0,0,0.35)'; overlay.style.setProperty('z-index', '2000000', 'important');
+    const box = document.createElement('div'); box.className = 'modalBox'; box.style.maxHeight = '80vh'; box.style.overflow = 'auto'; box.style.width = '920px'; box.style.position = 'relative'; box.style.setProperty('z-index', '2000001', 'important');
     const h = document.createElement('div'); h.style.fontWeight = '800'; h.style.marginBottom = '8px'; h.innerText = `Dropbox forms — Today`;
 
     const listWrapper = document.createElement('div'); listWrapper.style.display = 'flex'; listWrapper.style.flexDirection = 'column'; listWrapper.style.gap = '8px';
+
+    // Batch export controls for today's modal (reuse shared helper)
+    const selectedSet = new Set();
+    const MAX_BATCH = 5;
+    const controls = document.createElement('div'); controls.style.display = 'flex'; controls.style.justifyContent = 'flex-end'; controls.style.marginBottom = '8px';
+    const exportBtn = document.createElement('button'); exportBtn.className = 'glowBtn'; exportBtn.innerText = 'Export Selected (0)'; exportBtn.disabled = true; exportBtn.style.marginLeft = '8px';
+    try { controls.appendChild(exportBtn); } catch (e) {}
+    // wire exportBtn to shared helper
+    exportBtn.addEventListener('click', async () => { try { await exportSelectedFromList(listWrapper, exportBtn, selectedSet, String(now.getFullYear()), 'forms_today', MAX_BATCH); } catch (e) { console.warn('today export failed', e); } });
 
     function renderGrouped(filtered) {
       try {
@@ -3168,6 +3497,23 @@ function showTodayFormsModal() {
           groups[timeKey].forEach(ent => {
             const row = document.createElement('div'); row.className = 'fileItem';
             const left = document.createElement('div'); left.style.display = 'flex'; left.style.flexDirection = 'column';
+            const isFile = (ent && ((ent.raw && ent.raw['.tag'] === 'file') || (ent['.tag'] === 'file') || (/\.json$/i.test(ent.name || ''))));
+            let chk = null;
+            if (isFile) {
+              chk = document.createElement('input'); chk.type = 'checkbox'; chk.className = 'batchExportCheckbox'; chk.style.marginBottom = '8px'; chk.style.alignSelf = 'flex-start'; chk._entry = ent;
+              chk.addEventListener('change', (ev) => {
+                try {
+                  if (chk.checked) {
+                    if (selectedSet.size >= MAX_BATCH) { chk.checked = false; showNotification('Selection limit', `You can select up to ${MAX_BATCH} forms`, 'error'); return; }
+                    selectedSet.add(ent.path_lower || ent.id || ent.name || JSON.stringify(ent));
+                  } else { selectedSet.delete(ent.path_lower || ent.id || ent.name || JSON.stringify(ent)); }
+                  exportBtn.innerText = `Export Selected (${selectedSet.size})`;
+                  exportBtn.disabled = selectedSet.size === 0;
+                  try { if (selectedSet.size) exportBtn.classList.add('pulseExportBtn'); else exportBtn.classList.remove('pulseExportBtn'); } catch (e) {}
+                } catch (e) { console.warn('batch checkbox change failed (today)', e); }
+              });
+              left.appendChild(chk);
+            }
             const name = document.createElement('div'); name.className = 'fileName'; name.innerText = getFriendlyTitle(ent);
             const meta = document.createElement('div'); meta.className = 'meta'; meta.innerText = ent.server_modified ? new Date(ent.server_modified).toLocaleTimeString() : '';
             left.appendChild(name); left.appendChild(meta);
@@ -3183,21 +3529,25 @@ function showTodayFormsModal() {
               } catch (e) { console.warn('Open action failed', e); showNotification('Open failed', String(e), 'error'); }
             });
             actions.appendChild(open);
-            row.appendChild(left); row.appendChild(actions); listWrapper.appendChild(row);
+            row.appendChild(left); row.appendChild(actions);
+            try {
+              row.addEventListener('click', (ev) => {
+                try {
+                  const t = ev.target || ev.srcElement;
+                  if (!t) return;
+                  if (t.tagName === 'BUTTON' || t.tagName === 'INPUT' || (t.closest && t.closest('button')) || (t.closest && t.closest('input'))) return;
+                  if (isFile && chk) { chk.checked = !chk.checked; chk.dispatchEvent(new Event('change', { bubbles: true })); }
+                } catch (e) {}
+              });
+            } catch (e) {}
+            listWrapper.appendChild(row);
           });
         });
       } catch (e) { console.warn('renderGrouped (today) failed', e); }
     }
 
-    // Batch export controls for today's modal (reuse shared helper)
-    const selectedSet = new Set();
-    const MAX_BATCH = 5;
-    const controls = document.createElement('div'); controls.style.display = 'flex'; controls.style.justifyContent = 'flex-end'; controls.style.marginBottom = '8px';
-    const exportBtn = document.createElement('button'); exportBtn.className = 'glowBtn'; exportBtn.innerText = 'Export Selected (0)'; exportBtn.disabled = true; exportBtn.style.marginLeft = '8px';
-    try { controls.appendChild(exportBtn); } catch (e) {}
+    // append header, controls and list to modal and render
     box.appendChild(h); box.appendChild(controls); box.appendChild(listWrapper); renderGrouped(entries);
-    // wire exportBtn to shared helper
-    exportBtn.addEventListener('click', async () => { try { await exportSelectedFromList(listWrapper, exportBtn, selectedSet, String(now.getFullYear()), 'forms_today', MAX_BATCH); } catch (e) { console.warn('today export failed', e); } });
     const close = document.createElement('button'); close.innerText = 'Close';
     try { close.style.position = 'absolute'; close.style.top = '10px'; close.style.right = '12px'; close.style.zIndex = '30100'; close.style.background = '#ffecec'; close.style.color = '#b91c1c'; close.style.border = '1px solid #f5c6c6'; close.style.padding = '8px 10px'; close.style.borderRadius = '8px'; close.style.cursor = 'pointer'; } catch (e) {}
     close.addEventListener('click', (ev) => { ev.stopPropagation(); try { document.body.removeChild(overlay); } catch (e) {} });
@@ -3210,8 +3560,8 @@ function showTodayFormsModal() {
 // Show a small Manage Connection modal with actions: Refresh and Disconnect
 function showManageConnectionModal() {
   try {
-    const overlay = document.createElement('div'); overlay.className = 'modalOverlay'; overlay.style.zIndex = 40000;
-    const box = document.createElement('div'); box.className = 'modalBox'; box.style.width = '360px'; box.style.padding = '14px'; box.style.position = 'relative';
+    const overlay = document.createElement('div'); overlay.className = 'modalOverlay'; overlay.style.position = 'fixed'; overlay.style.inset = '0'; overlay.style.display = 'flex'; overlay.style.alignItems = 'center'; overlay.style.justifyContent = 'center'; overlay.style.background = 'rgba(0,0,0,0.35)'; overlay.style.setProperty('z-index', '2000000', 'important');
+    const box = document.createElement('div'); box.className = 'modalBox'; box.style.width = '360px'; box.style.padding = '14px'; box.style.position = 'relative'; box.style.setProperty('z-index', '2000001', 'important');
     const h = document.createElement('div'); h.style.fontWeight = '800'; h.style.marginBottom = '12px'; h.innerText = 'Manage Dropbox connection';
 
     const info = document.createElement('div'); info.style.marginBottom = '12px'; info.style.color = '#475569'; info.innerText = 'Choose an action for your Dropbox connection.';
@@ -3259,8 +3609,8 @@ async function openRemotePreview(entry) {
     const res = await window.electronAPI.drive.getTemporaryLink(entry.path_lower);
     hideSpinner();
     if (!res || !res.ok || !res.link) return showNotification('Preview failed', (res && res.error) || 'No temporary link', 'error');
-    const overlay = document.createElement('div'); overlay.className = 'modalOverlay'; overlay.style.zIndex = 32000;
-    const box = document.createElement('div'); box.className = 'modalBox'; box.style.width = '1000px'; box.style.maxHeight = '90vh'; box.style.padding = '8px'; box.style.position = 'relative';
+    const overlay = document.createElement('div'); overlay.className = 'modalOverlay'; overlay.style.position = 'fixed'; overlay.style.inset = '0'; overlay.style.display = 'flex'; overlay.style.alignItems = 'center'; overlay.style.justifyContent = 'center'; overlay.style.background = 'rgba(0,0,0,0.35)'; overlay.style.setProperty('z-index', '2000000', 'important');
+    const box = document.createElement('div'); box.className = 'modalBox'; box.style.width = '1000px'; box.style.maxHeight = '90vh'; box.style.padding = '8px'; box.style.position = 'relative'; box.style.setProperty('z-index', '2000001', 'important');
     const title = document.createElement('div'); title.style.fontWeight = '800'; title.style.marginBottom = '8px'; title.innerText = getFriendlyTitle(entry || {});
     const frame = document.createElement('iframe'); frame.style.width = '100%'; frame.style.height = '70vh'; frame.style.border = '0'; frame.src = res.link;
     const close = document.createElement('button'); close.innerText = 'Close';
@@ -3505,6 +3855,37 @@ function updateDropboxStatus(connected, info) {
               try { localListEl.style.display = ''; } catch (e) {}
             }
           } catch (e) {}
+            // Ensure a persistent Connect card exists in the sidebar when disconnected.
+            try {
+              const localList = document.getElementById('localList');
+              const sidebar = document.getElementById('yearSidebar') || (localList && localList.parentNode) || document.body;
+              // Avoid duplicating the card
+              if (!document.getElementById('sidebarConnectCard')) {
+                const wrapper = document.createElement('div'); wrapper.className = 'yearCardsSidebar';
+                const card = document.createElement('div'); card.className = 'yearCard center'; card.id = 'sidebarConnectCard';
+                card.style.cursor = 'default';
+                const badge = document.createElement('div'); badge.className = 'statusBadge'; badge.innerText = 'NOT CONNECTED';
+                const title = document.createElement('div'); title.className = 'yearTitle'; title.innerText = 'Dropbox disconnected';
+                const metaRow = document.createElement('div'); metaRow.className = 'yearMetaRow'; metaRow.innerHTML = '<div class="metaItem">Connect to sync and view years</div>';
+                const actions = document.createElement('div'); actions.style.marginTop = '12px';
+                const btn = document.createElement('button'); btn.className = 'glowBtn'; btn.innerText = 'Connect'; btn.addEventListener('click', async (ev) => {
+                  try { ev && ev.stopPropagation && ev.stopPropagation(); if (connectBtn && typeof connectBtn.click === 'function') return connectBtn.click(); const alt = document.querySelector('#connectDropbox'); if (alt && typeof alt.click === 'function') return alt.click(); if (window.electronAPI && window.electronAPI.drive && typeof window.electronAPI.drive.signIn === 'function') { await window.electronAPI.drive.signIn(); } else showNotification('Connect', 'Unable to initiate connection from here', 'error'); } catch (e) { console.warn('sidebar connect click failed', e); }
+                });
+                actions.appendChild(btn);
+                card.appendChild(badge); card.appendChild(title); card.appendChild(metaRow); card.appendChild(actions);
+                wrapper.appendChild(card);
+                try {
+                  if (localList) {
+                    // clear existing and insert placeholder wrapper
+                    localList.innerHTML = '';
+                    localList.appendChild(wrapper);
+                  } else if (sidebar) {
+                    // insert at top of sidebar
+                    try { sidebar.insertBefore(wrapper, sidebar.firstChild); } catch (e) { sidebar.appendChild(wrapper); }
+                  }
+                } catch (e) { try { document.body.appendChild(wrapper); } catch (ex) {} }
+              }
+            } catch (e) { console.warn('sidebar connect card failed', e); }
       } catch (e) {}
       // remove any legacy status text elements
       try { Array.from(document.querySelectorAll('#dropboxStatus')).forEach(n => { try { n.remove(); } catch (e) {} }); } catch (e) {}
