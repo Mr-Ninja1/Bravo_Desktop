@@ -1208,7 +1208,7 @@ function _saveAgreement(obj) { try { localStorage.setItem(AGREEMENT_KEY, JSON.st
 function showAgreementModal(force) {
   try {
     const a = _loadAgreement();
-    if (!force && a && a.accepted) return;
+    // allow showing while trial is active; do not silently skip because of a.accepted
     // Avoid duplicate overlays
     if (document.getElementById('bravoAgreementOverlay')) return;
     const overlay = document.createElement('div'); overlay.id = 'bravoAgreementOverlay'; overlay.className = 'modalOverlay';
@@ -1216,6 +1216,21 @@ function showAgreementModal(force) {
     overlay.style.background = 'rgba(0,0,0,0.7)'; overlay.style.setProperty('z-index', '2000000', 'important');
     const box = document.createElement('div'); box.className = 'modalBox'; box.style.minWidth = '480px'; box.style.maxWidth = '92%'; box.style.padding = '20px'; box.style.background = '#02101a'; box.style.color = '#e6fbff'; box.style.borderRadius = '12px'; box.style.setProperty('z-index', '2000001', 'important');
     const h = document.createElement('div'); h.style.fontWeight = '900'; h.style.marginBottom = '12px'; h.style.fontSize = '20px'; h.innerText = 'Optional Premium features — 7-day trial active';
+    // Insert a prominent days-left counter (big, bold) when trial is running
+    try {
+      const lic = _loadLicense();
+      const start = lic && lic.trialStart ? new Date(lic.trialStart) : null;
+      if (start) {
+        const now = new Date();
+        const expiry = new Date(start.getTime() + (TRIAL_DAYS * 24 * 60 * 60 * 1000));
+        const msLeft = Math.max(0, expiry.getTime() - now.getTime());
+        const daysLeft = Math.max(0, Math.ceil(msLeft / (24 * 60 * 60 * 1000)));
+        const daysEl = document.createElement('div');
+        daysEl.style.fontSize = '34px'; daysEl.style.fontWeight = '900'; daysEl.style.color = '#ffffff'; daysEl.style.marginBottom = '10px';
+        daysEl.innerText = (daysLeft <= 0) ? 'Trial ended' : (daysLeft + (daysLeft === 1 ? ' day left' : ' days left'));
+        box.appendChild(daysEl);
+      }
+    } catch (e) {}
     const p = document.createElement('div'); p.style.marginBottom = '12px'; p.style.lineHeight = '1.45'; p.style.color = '#dffbff'; p.style.fontSize = '15px';
     p.innerText = 'We have improved this app with new powerful features thats go beyond your requirements you did not request these features they are all our ideas to make your work easy if you like them you will let us know , these features will stop working afer some time and you need to buy them to continue enjoying ,Your trial lasts 7 days — after that premium features will stop working unless you activate the app with a product key, but dont worry you will still be able to see forms and export/share them .';
     const hint = document.createElement('div'); hint.style.marginBottom = '12px'; hint.style.color = '#bfeeff'; hint.style.fontSize = '14px'; hint.innerText = 'You will be reminded daily while your trial is active.';
@@ -1271,7 +1286,7 @@ function showAgreementModal(force) {
 function checkAgreementOnStartup() {
   try {
     const a = _loadAgreement();
-    if (a && a.accepted) return;
+    // always run reminders while trial is active (do not skip based on accepted flag)
     // show on first-run quickly so users see it
     try {
       const lic = _loadLicense();
@@ -1316,14 +1331,33 @@ function checkAgreementOnStartup() {
 // run agreement check after startup
 try { setTimeout(checkAgreementOnStartup, 2000); } catch (e) {}
 
+// Auto-update: listen for update events from main and apply automatically
+try {
+  if (window && window.electronAPI && window.electronAPI.updates) {
+    window.electronAPI.updates.onUpdateAvailable((info) => {
+      try { showNotification('Update', 'Update available — downloading in background', ''); } catch (e) {}
+    });
+    window.electronAPI.updates.onUpdateDownloaded((info) => {
+      try { showNotification('Update ready', 'Installing update now — app will restart', 'success'); } catch (e) {}
+      try { setTimeout(() => { try { window.electronAPI.updates.applyUpdate(); } catch (e) {} }, 1200); } catch (e) {}
+    });
+  }
+} catch (e) {}
+
 // Release notes modal for new release
 function showReleaseModal(version) {
   try {
     if (document.getElementById('bravoReleaseOverlay')) return;
+    // Remove any active tutorial overlays so the release modal appears in front
+    try {
+      const tourIds = ['bravoTourOverlay', 'bravoBatchTour', 'bravoAgreementOverlay'];
+      tourIds.forEach(id => { try { const el = document.getElementById(id); if (el && el.parentNode) el.parentNode.removeChild(el); } catch (e) {} });
+    } catch (e) {}
+
     const overlay = document.createElement('div'); overlay.id = 'bravoReleaseOverlay'; overlay.className = 'modalOverlay';
     overlay.style.position = 'fixed'; overlay.style.inset = '0'; overlay.style.display = 'flex'; overlay.style.alignItems = 'center'; overlay.style.justifyContent = 'center';
-    overlay.style.background = 'rgba(0,0,0,0.75)'; overlay.style.setProperty('z-index', '2000000', 'important');
-    const box = document.createElement('div'); box.className = 'modalBox'; box.style.minWidth = '420px'; box.style.maxWidth = '92%'; box.style.padding = '20px'; box.style.background = '#02101a'; box.style.color = '#e6fbff'; box.style.borderRadius = '12px'; box.style.setProperty('z-index', '2000001', 'important');
+    overlay.style.background = 'rgba(0,0,0,0.85)'; overlay.style.setProperty('z-index', '3000000', 'important');
+    const box = document.createElement('div'); box.className = 'modalBox'; box.style.minWidth = '420px'; box.style.maxWidth = '92%'; box.style.padding = '20px'; box.style.background = '#02101a'; box.style.color = '#e6fbff'; box.style.borderRadius = '12px'; box.style.setProperty('z-index', '3000001', 'important');
     const h = document.createElement('div'); h.style.fontWeight = '900'; h.style.marginBottom = '12px'; h.style.fontSize = '20px'; h.innerText = `Bravo — Release ${version}`;
     const p = document.createElement('div'); p.style.marginBottom = '12px'; p.style.lineHeight = '1.45'; p.style.color = '#dffbff'; p.style.fontSize = '14px';
     p.innerText = 'Welcome to the new release. This update includes UI polish, improved exports, storage alerts, and security enhancements.';
@@ -1346,7 +1380,7 @@ try {
   const prev = localStorage.getItem('bravo_last_release');
   const cur = (function(){ try { return require('../package.json').version || '0.0.4'; } catch (e) { try { return '0.0.4'; } catch (ee) { return '0.0.4'; } } })();
   if (!prev || prev !== cur) {
-    try { setTimeout(() => showReleaseModal(cur), 1400); localStorage.setItem('bravo_last_release', cur); } catch (e) {}
+    try { setTimeout(() => showReleaseModal(cur), 800); localStorage.setItem('bravo_last_release', cur); } catch (e) {}
   }
 } catch (e) {}
 

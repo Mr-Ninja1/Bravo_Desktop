@@ -21,6 +21,12 @@ try {
     });
     _autoUpdater.on('update-downloaded', (info) => {
       try { BrowserWindow.getAllWindows().forEach(w => w.webContents.send('update-downloaded', info)); } catch (e) {}
+      // Auto-install the update shortly after download (silent when possible)
+      try {
+        setTimeout(() => {
+          try { if (_autoUpdater && typeof _autoUpdater.quitAndInstall === 'function') { _autoUpdater.quitAndInstall(false, true); } } catch (e) { console.warn('auto-install failed', e && e.message ? e.message : e); }
+        }, 3500);
+      } catch (e) {}
     });
     _autoUpdater.on('error', (err) => { try { console.warn('auto-updater error', err && err.message ? err.message : err); } catch (e) {} });
   }
