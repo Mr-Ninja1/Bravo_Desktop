@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Buy Features — RAJAB CULTURE DIGITAL SOLUTIONS (RC) digital</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <div class="logo">RC<span class="accent">digital</span></div>
+      <div class="company">RAJAB CULTURE DIGITAL SOLUTIONS</div>
+    </div>
+  </header>
+
+  <main class="hero">
+    <div class="hero-inner">
+      <h1>Unlock premium productivity features</h1>
+      <p class="lead">Batch export, advanced storage, app-lock and analytics — try during your free 7-day evaluation or upgrade now.</p>
+      <div class="ctas">
+        <a id="buyBtn" class="btn primary" href="#" role="button">Buy features</a>
+        <a class="btn ghost" href="#portfolio">See our work</a>
+      </div>
+      <div class="quick-cards">
+        <div class="card-cta" id="contactCard">
+          <div class="card-cta-title">Contact developer</div>
+          <div class="card-cta-body">Email: <a href="mailto:sikalumbit30@gmail.com">sikalumbit30@gmail.com</a><br/>Phone: <a href="tel:+0970105334">0970105334 /  0979171520</a></div>
+        </div>
+        <div class="card-cta" id="orderCard">
+          <div class="card-cta-title">Order now</div>
+          <div class="card-cta-body">Email to order — we normally reply within 24 hours. Use the form below to place an order and we'll follow up with pricing and activation instructions.</div>
+          <div style="margin-top:10px">
+            <button id="orderToggle" class="btn primary">Order now</button>
+          </div>
+
+          <form id="orderForm" class="order-form" action="https://formspree.io/f/your-form-id" method="POST" style="display:none;margin-top:12px">
+            <input type="text" name="name" placeholder="Your name" required style="width:100%;padding:8px;margin-bottom:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.06);background:transparent;color:inherit">
+            <input type="email" name="email" placeholder="Your email" required style="width:100%;padding:8px;margin-bottom:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.06);background:transparent;color:inherit">
+            <textarea name="message" placeholder="Order details / message" required style="width:100%;padding:8px;margin-bottom:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.06);background:transparent;color:inherit" rows="4"></textarea>
+            <input type="hidden" name="source" id="order_source">
+            <div style="display:flex;gap:8px;justify-content:flex-end">
+              <button type="button" id="orderCancel" class="btn ghost">Cancel</button>
+              <button type="submit" class="btn primary">Send order</button>
+            </div>
+            <div id="orderMsg" style="margin-top:8px;display:none"></div>
+          </form>
+        </div>
+      </div>
+      <div class="offer" id="offer">Limited-time: 10% off </div>
+    </div>
+  </main>
+
+  <section id="features" class="features">
+    <h2>What you get</h2>
+    <ul>
+      <li><strong>Batch export</strong> — export many forms into a single PDF in seconds.</li>
+      <li><strong>Export Today</strong> — one-click export for today's forms.</li>
+      <li><strong>Dropbox analytics</strong> — storage, totals and trends at a glance.</li>
+      <li><strong>App lock</strong> — protect your app with a local password.</li>
+    </ul>
+  </section>
+
+  <section id="portfolio" class="portfolio">
+    <h2>Selected work</h2>
+    <p>We build modern, usable tools for operations and safety teams. Browse a few projects on our GitHub or contact us for custom work.</p>
+   
+  </section>
+
+  <footer class="foot">
+    <div>RAJAB CULTURE DIGITAL SOLUTIONS (RC) digital — <a href="mailto:sikalumbit30@gmail.com">sikalumbit30@gmail.com</a> · <a href="tel:+0970105334">0970105334</a></div>
+  </footer>
+
+  <script>
+    // Attach simple UTM/deeplink params to buy button if present
+    (function(){
+      try {
+        const buy = document.getElementById('buyBtn');
+        if (!buy) return;
+        // If the page is opened with ?from=app or ?trial=1 add a param to the buy link
+        const qs = new URLSearchParams(location.search);
+        const extras = [];
+        if (qs.get('from')) extras.push('from=' + encodeURIComponent(qs.get('from')));
+        if (qs.get('trial')) extras.push('trial=' + encodeURIComponent(qs.get('trial')));
+        if (extras.length) {
+          const href = new URL(buy.href);
+          extras.forEach(e => {
+            const parts = e.split('='); href.searchParams.set(parts[0], parts[1]);
+          });
+          buy.href = href.toString();
+        }
+      } catch (e) { console.warn(e); }
+    })();
+  </script>
+  <script>
+    // Lightweight analytics & form handling
+    (function(){
+      try {
+        // capture utm-like params and expose for form
+        const qs = new URLSearchParams(location.search);
+        const source = qs.get('from') || qs.get('utm_source') || '';
+
+        function trackEvent(name, data) {
+          try {
+            const key = '_rc_analytics_events';
+            const arr = JSON.parse(localStorage.getItem(key) || '[]');
+            arr.push({ name, data: data || {}, ts: Date.now() });
+            localStorage.setItem(key, JSON.stringify(arr));
+            // If host app provides an analytics bridge, call it
+            try { if (window.electronAPI && typeof window.electronAPI.sendAnalytics === 'function') window.electronAPI.sendAnalytics({ event: name, data: data || {} }); } catch (e) {}
+          } catch (e) {}
+        }
+
+        // buy -> reveal contact card (already handled) but track
+        const buy = document.getElementById('buyBtn');
+        const contact = document.getElementById('contactCard');
+        if (buy) buy.addEventListener('click', (ev) => { try { ev && ev.preventDefault && ev.preventDefault(); trackEvent('buy_click', { source }); if (contact) { contact.scrollIntoView({ behavior: 'smooth', block: 'center' }); contact.classList.add('card-highlight'); setTimeout(()=>contact.classList.remove('card-highlight'),3800); } } catch (e) {} });
+
+        // order form toggle and handling
+        const orderToggle = document.getElementById('orderToggle');
+        const orderForm = document.getElementById('orderForm');
+        const orderCancel = document.getElementById('orderCancel');
+        const orderMsg = document.getElementById('orderMsg');
+        const orderSource = document.getElementById('order_source');
+        if (orderSource) orderSource.value = source || 'purchase_page';
+
+        if (orderToggle && orderForm) orderToggle.addEventListener('click', () => { try { orderForm.style.display = orderForm.style.display === 'none' ? 'block' : 'none'; trackEvent('order_form_view'); } catch (e) {} });
+        if (orderCancel) orderCancel.addEventListener('click', () => { try { orderForm.style.display = 'none'; } catch (e) {} });
+
+        if (orderForm) {
+          orderForm.addEventListener('submit', async (ev) => {
+            try {
+              ev.preventDefault();
+              trackEvent('order_submit_attempt');
+              const formData = new FormData(orderForm);
+              const endpoint = orderForm.action;
+              orderMsg.style.display = 'block'; orderMsg.innerText = 'Sending...';
+              const res = await fetch(endpoint, { method: 'POST', body: formData, headers: { Accept: 'application/json' } }).catch(() => null);
+              if (res && (res.ok || res.status === 200 || res.status === 201)) {
+                trackEvent('order_submit_success');
+                orderMsg.innerText = 'Order sent — we will reply within 24 hours.';
+                orderForm.reset();
+              } else {
+                trackEvent('order_submit_failed');
+                orderMsg.innerText = 'Unable to send. You can also email sikalumbit30@gmail.com.';
+              }
+            } catch (e) { try { orderMsg.innerText = 'Submission failed.'; } catch (ex) {} }
+          });
+        }
+      } catch (e) { console.warn('purchase page scripts failed', e); }
+    })();
+  </script>
+  <script>
+    // When Buy features is clicked (no payment gateway yet) reveal contact card
+    (function(){
+      try {
+        const buy = document.getElementById('buyBtn');
+        const contact = document.getElementById('contactCard');
+        if (!buy || !contact) return;
+        buy.addEventListener('click', (ev) => {
+          try {
+            ev && ev.preventDefault && ev.preventDefault();
+            contact.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            contact.classList.add('card-highlight');
+            setTimeout(() => { try { contact.classList.remove('card-highlight'); } catch (e) {} }, 3800);
+          } catch (e) { console.warn(e); }
+        });
+      } catch (e) { console.warn(e); }
+    })();
+  </script>
+</body>
+</html>

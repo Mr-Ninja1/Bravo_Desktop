@@ -1,0 +1,44 @@
+:root{
+  --bg-1: #02101a;
+  --bg-2: #04243a;
+  --accent-1: #1ea7ff;
+  --accent-2: #6f5cff;
+  --muted: #bfeeff;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:Inter,Segoe UI,Roboto,system-ui,-apple-system,"Helvetica Neue",Arial;background:linear-gradient(180deg,var(--bg-1),var(--bg-2));color:#e6fbff;min-height:100vh}
+header.top{padding:18px 20px}
+.brand{display:flex;flex-direction:column;gap:4px}
+.logo{font-weight:900;font-size:20px;color:var(--accent-1)}
+.logo .accent{color:var(--accent-2);margin-left:6px}
+.company{font-size:12px;color:var(--muted)}
+.hero{display:flex;align-items:center;justify-content:center;padding:48px 16px}
+.hero-inner{max-width:920px;text-align:center}
+.hero h1{font-size:34px;margin:0 0 12px}
+.lead{color:var(--muted);margin:0 0 18px}
+.ctas{display:flex;gap:12px;justify-content:center;margin-bottom:12px}
+.btn{display:inline-block;padding:12px 18px;border-radius:10px;text-decoration:none;color:inherit}
+.btn.primary{background:linear-gradient(90deg,var(--accent-1),var(--accent-2));box-shadow:0 10px 30px rgba(30,122,255,0.12)}
+.btn.ghost{background:transparent;border:1px solid rgba(255,255,255,0.06);color:var(--muted)}
+.quick-cards{display:flex;gap:12px;justify-content:center;margin-top:18px;flex-wrap:wrap}
+.card-cta{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));border-radius:10px;padding:14px;max-width:320px;text-align:left;box-shadow:0 8px 30px rgba(0,0,0,0.4)}
+.card-cta-title{font-weight:800;color:var(--accent-1);margin-bottom:6px}
+.card-cta-body{color:var(--muted);font-size:14px}
+
+/* Highlight when Buy is clicked to draw attention */
+.card-highlight{border:1px solid #ff6b6b;box-shadow:0 10px 40px rgba(255,107,107,0.16),0 0 0 6px rgba(255,107,107,0.06);transform:translateY(-6px);transition:all 300ms ease}
+
+/* Order form styles */
+.order-form input,.order-form textarea{background:transparent;border:1px solid rgba(255,255,255,0.06);color:inherit;border-radius:6px;padding:8px}
+.order-form .btn.ghost{background:transparent;border:1px solid rgba(255,255,255,0.06)}
+.order-form #orderMsg{color:var(--muted)}
+.offer{margin-top:8px;color:#ffdca8;font-weight:700}
+.features, .portfolio{max-width:920px;margin:28px auto;padding:18px;background:rgba(255,255,255,0.02);border-radius:12px}
+.features h2, .portfolio h2{margin-top:0}
+.features ul{padding-left:18px;margin:8px 0}
+.features li{margin:8px 0}
+.links{display:flex;gap:12px;flex-wrap:wrap}
+.card{display:inline-block;padding:12px 14px;border-radius:10px;background:rgba(255,255,255,0.02);color:var(--muted);text-decoration:none}
+.foot{max-width:920px;margin:28px auto;color:var(--muted);font-size:13px;padding:8px}
+.small{opacity:0.8;margin-top:6px}
+@media(max-width:640px){.hero h1{font-size:22px}.ctas{flex-direction:column}}
