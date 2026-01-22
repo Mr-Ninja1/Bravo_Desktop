@@ -21,7 +21,7 @@ let disconnectBtn = null;
 
 // --- Simple local trial / product-key gating
 const LICENSE_KEY = 'bravo_license_v1';
-const TRIAL_DAYS = 5; // configurable trial length (days)
+const TRIAL_DAYS = 0; // configurable trial length (days)
 // URL to a public JSON file listing issued keys. Set to your repo raw URL.
 const KEYS_JSON_URL = 'https://raw.githubusercontent.com/Mr-Ninja1/Bravo_Desktop/main/keys.json';
 // Default purchase landing page (GitHub Pages) — override with window.__PURCHASE_URL if needed
@@ -3224,7 +3224,7 @@ function showYearFormsModal(year) {
           const open = document.createElement('button'); open.innerText = 'Open';
             open.addEventListener('click', async () => {
               try {
-                if (!isFeatureEnabled('openToday')) { showTrialExpiredModal('Open Today'); return; }
+                // allow opening forms from year list even if trial expired
                 const r = await window.electronAPI.drive.downloadToTemp(ent.path_lower, ent.name);
                 if (!r || !r.ok || !r.path) return showNotification('Open failed', (r && r.error) || 'Download failed', 'error');
                 const localEntry = { title: getFriendlyTitle(ent), meta: { filePath: r.path }, _overlayZ: 31000 };
