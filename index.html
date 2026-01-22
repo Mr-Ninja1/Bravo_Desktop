@@ -124,7 +124,7 @@
         const orderSource = document.getElementById('order_source');
         if (orderSource) orderSource.value = source || 'purchase_page';
 
-        if (orderToggle && orderForm) orderToggle.addEventListener('click', () => { try { orderForm.style.display = orderForm.style.display === 'none' ? 'block' : 'none'; trackEvent('order_form_view'); } catch (e) {} });
+        if (orderToggle) orderToggle.addEventListener('click', () => { try { trackEvent('order_contact_view'); const contactEl = document.getElementById('contactCard'); if (contactEl) { contactEl.scrollIntoView({ behavior: 'smooth', block: 'center' }); contactEl.classList.add('card-highlight'); setTimeout(() => { try { contactEl.classList.remove('card-highlight'); } catch (e) {} }, 3800); } if (orderForm) { try { orderForm.style.display = 'none'; } catch (e) {} } } catch (e) {} });
         if (orderCancel) orderCancel.addEventListener('click', () => { try { orderForm.style.display = 'none'; } catch (e) {} });
 
         if (orderForm) {
